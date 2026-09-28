@@ -184,7 +184,7 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pull requests to `main`, and `publish.yml` calls it
+`.github/workflows/ci.yml` runs on pull requests to `main` and to `release/**` branches, and `publish.yml` calls it
 (`workflow_call`) as its `verify` job, so a release runs the same checks:
 
 - `test` (Node 24): lint, `test:coverage` (thresholds in `vitest.config.ts`), `tsc` on
@@ -200,6 +200,14 @@ Settings → Pages → Source: **GitHub Actions**.
 
 Its concurrency group cancels superseded runs only for pull requests; a run called by
 `publish.yml` gets its own group and is never cancelled.
+
+### Release branches
+
+A major release is prepared on a long-lived branch (e.g. `release/1.0`, cut from `main`): its
+breaking changes land there as separate PRs, which CI checks like PRs into `main`. PRs into
+`release/*` carry **no** version bump (an exception to [Versioning](#versioning)), and nothing
+publishes from a release branch. The final PR from the release branch to `main` bumps the version
+(e.g. to `1.0.0`) and adds its `CHANGELOG.md` entry; its merge publishes as usual.
 
 ## Publishing
 

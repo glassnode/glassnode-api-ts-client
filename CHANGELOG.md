@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.29.4
+
+- CI: `ci.yml` now also runs on pull requests into `release/**` branches (e.g. `release/1.0`), not
+  only into `main`, so PRs into a long-lived release branch get the full CI check list. Publishing
+  is unchanged: `publish.yml` still releases only on a push to `main`.
+- Docs: `CLAUDE.md` and `CONTRIBUTING.md` describe the release-branch flow: PRs into `release/*`
+  carry no version bump, and the final PR from the release branch to `main` bumps the version. No
+  change to the published package.
+
 ## 0.29.3
 
 - Package metadata: `package.json` `author.url` now points at the author's GitHub profile
