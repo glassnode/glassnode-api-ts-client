@@ -61,9 +61,19 @@ describing it. Follow [semver](https://semver.org/):
 The version in your PR is exactly the one that gets published: the release workflow does not bump
 it. A PR merged without a bump publishes nothing.
 
+**Release branches.** A major release is prepared on a long-lived `release/**` branch (e.g.
+`release/1.0`). PRs into a release branch carry no version bump, but each still adds its
+`CHANGELOG.md` entry, with migration notes for breaking changes, under a single
+`## 1.0.0 (unreleased)`-style heading. The final PR from the release branch to `main` bumps the
+version (e.g. to `1.0.0`) and renames that heading to exactly `## 1.0.0`, the form the release
+workflow extracts the GitHub Release notes from. The release branch takes merges from `main`
+during its lifetime, and right after any CI change lands there: a PR's CI runs the `ci.yml` of its
+merge commit, so the release branch needs the current one. Only PRs into it are CI-checked, not
+direct pushes; the final PR to `main` checks the combined result.
+
 ### 4. Run the full local check list
 
-CI runs these on every PR; run them locally first:
+CI runs these on every PR into `main` or a `release/**` branch; run them locally first:
 
 ```bash
 pnpm run lint
@@ -83,6 +93,8 @@ pnpm dlx @arethetypeswrong/cli --pack .
 `{@link}`.
 
 ### 5. Open the PR against `main`
+
+(Or against the `release/**` branch, for a change that belongs to an upcoming major release.)
 
 A good PR description says:
 
