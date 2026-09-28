@@ -5,9 +5,13 @@
 - CI: `ci.yml` now also runs on pull requests into `release/**` branches (e.g. `release/1.0`), not
   only into `main`, so PRs into a long-lived release branch get the full CI check list. Publishing
   is unchanged: `publish.yml` still releases only on a push to `main`.
-- Docs: `CLAUDE.md` and `CONTRIBUTING.md` describe the release-branch flow: PRs into `release/*`
-  carry no version bump, and the final PR from the release branch to `main` bumps the version. No
-  change to the published package.
+- Docs: `CLAUDE.md` and `CONTRIBUTING.md` describe the release-branch flow. PRs into `release/**`
+  carry no version bump but add their `CHANGELOG.md` entry (with migration notes) under a
+  `## 1.0.0 (unreleased)`-style heading; the final PR to `main` bumps the version and renames the
+  heading to exactly `## <version>`, which `publish.yml` extracts. The release branch takes merges
+  from `main` (right after a CI change like this one, since a PR runs its merge commit's `ci.yml`).
+  CI on `release/**` PRs blocks merges only if a ruleset requires the checks. No change to the
+  published package.
 
 ## 0.29.3
 

@@ -143,6 +143,9 @@ Follow [semver](https://semver.org/):
 1. Bump `version` in `package.json` (patch, minor, or major as appropriate)
 2. Add a corresponding entry to `CHANGELOG.md` describing the changes
 
+Exception: PRs into `release/**` branches carry no version bump (they still add a CHANGELOG entry);
+see [Release branches](#release-branches).
+
 The `version` in `package.json` is exactly what gets published: CI never bumps it. A change
 merged without a bump publishes nothing (see [Publishing](#publishing)).
 
@@ -184,8 +187,8 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pull requests to `main` and to `release/**` branches, and `publish.yml` calls it
-(`workflow_call`) as its `verify` job, so a release runs the same checks:
+`.github/workflows/ci.yml` runs on pull requests to `main` and to `release/**` branches, and
+`publish.yml` calls it (`workflow_call`) as its `verify` job, so a release runs the same checks:
 
 - `test` (Node 24): lint, `test:coverage` (thresholds in `vitest.config.ts`), `tsc` on
   `tsconfig.test.json` and `tsconfig.examples.json`, an offline ts-node import of `../src` from
@@ -203,11 +206,23 @@ Its concurrency group cancels superseded runs only for pull requests; a run call
 
 ### Release branches
 
-A major release is prepared on a long-lived branch (e.g. `release/1.0`, cut from `main`): its
-breaking changes land there as separate PRs, which CI checks like PRs into `main`. PRs into
-`release/*` carry **no** version bump (an exception to [Versioning](#versioning)), and nothing
-publishes from a release branch. The final PR from the release branch to `main` bumps the version
-(e.g. to `1.0.0`) and adds its `CHANGELOG.md` entry; its merge publishes as usual.
+A major release is prepared on a long-lived `release/**` branch (e.g. `release/1.0`, cut from
+`main`); its breaking changes land there as separate PRs, and nothing publishes from it.
+
+- **Versioning:** PRs into `release/**` carry **no** version bump. Each one does add its
+  `CHANGELOG.md` entry, with migration notes for breaking changes, under a single
+  `## 1.0.0 (unreleased)`-style heading at the top. The final PR from the release branch to `main`
+  bumps `version` (e.g. to `1.0.0`) and renames that heading to exactly `## <version>` (e.g.
+  `## 1.0.0`): `publish.yml` takes the GitHub Release notes from the line that equals
+  `## <version>`, so any suffix left on the heading leaves the Release without notes. Its merge
+  publishes as usual.
+- **CI:** `ci.yml` runs on PRs into `release/**`, but that is not a merge gate by itself: the checks
+  block a merge only if a ruleset for `release/**` requires them. Only PRs are CI-checked, not
+  direct pushes to the release branch; the combined state is checked by the final PR to `main`.
+- **Keeping in sync:** merge `main` into the release branch during its lifetime, and right after
+  any CI change lands on `main`. A `pull_request` run uses the workflow from the PR's merge commit,
+  so until the release branch has a `ci.yml` whose trigger includes `release/**` (this change),
+  PRs into it get no CI at all.
 
 ## Publishing
 

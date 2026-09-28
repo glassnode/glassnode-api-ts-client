@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 # Cancel superseded runs for the same PR (github.ref is refs/pull/<n>/merge, unique per PR whatever
-# its base branch, so PRs into main and into release/** never share a group). When publish.yml calls this workflow the group is the
-# caller's run (never shared) and nothing is cancelled, so one release's checks can never cancel
-# another's.
+# its base branch, so PRs into main and into release/** never share a group). When publish.yml
+# calls this workflow the group is the caller's run (never shared) and nothing is cancelled, so one
+# release's checks can never cancel another's.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-{0}', github.ref) || format('ci-release-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
