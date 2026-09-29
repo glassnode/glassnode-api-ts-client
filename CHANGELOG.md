@@ -43,6 +43,25 @@
     To keep treating `0` as "not recorded", use `meta.modified || undefined` (or check for `0`)
     before converting.
 
+- `package.json` no longer has a top-level `browser` field; `unpkg` and `jsdelivr` fields point at
+  `dist/glassnode-api.umd.min.js` instead (#37). `exports` gets no `browser` condition, so
+  bundlers keep resolving the tree-shakeable ESM build (`import`) or CommonJS (`require`) exactly
+  as before. Both bundles still ship at the same paths, and the bare unpkg/jsDelivr URL still
+  serves the UMD bundle.
+  - **Who is affected:** only tools that read `browser` and ignore `exports` (e.g. webpack 4,
+    Browserify, or a bundler with `exports` resolution turned off). They now fall back to `module`
+    (`dist/esm/index.js`) or `main` (`dist/index.js`), which import `zod` as a dependency instead
+    of the pre-minified bundle with `zod` inlined. The API is the same.
+  - **Migration:** nothing for most users. To keep loading the UMD bundle, reference it by path:
+    `glassnode-api/dist/glassnode-api.umd.min.js` in a `<script>` tag or a bundler alias (only
+    `exports`-unaware tools can import that deep path; `exports` does not list it).
+
+### Build
+
+- `tsconfig.browser.json` uses `module: ESNext` and `moduleResolution: bundler` instead of the
+  deprecated `moduleResolution: node` (`node10`), so `build:browser` no longer warns TS5107 and
+  keeps working on TypeScript 7 (#35). The browser bundles are byte-identical before and after.
+
 ## 0.30.1
 
 - Fix: `callBulkMetric()` now rejects a `metricPath` ending in `/bulk` (e.g. the metadata's
