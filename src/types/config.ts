@@ -126,8 +126,8 @@ export const GlassnodeConfigSchema = z
      * unset value `undefined`; the `GlassnodeAPI` constructor applies the default, which depends
      * on `x402`.
      *
-     * In `x402` mode the default is 0 ({@link DEFAULT_X402_MAX_RETRIES}): the client cannot tell whether the `fetch` it was given
-     * refuses to retry after a signed payment was sent. The fetch from `createX402Fetch` does
+     * In `x402` mode the default is 0 ({@link DEFAULT_X402_MAX_RETRIES}): the client cannot tell
+     * whether the `fetch` it was given refuses to retry after a signed payment was sent. The fetch from `createX402Fetch` does
      * (such a failure becomes a never-retried `GlassnodePaymentError`), so with it an explicit
      * `maxRetries` only ever retries unpaid requests; with a bare x402 wrapper, a retry after a
      * paid `5xx` or a timeout would sign a new payment and could pay twice.

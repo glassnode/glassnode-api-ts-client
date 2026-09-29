@@ -70,8 +70,10 @@
   existing backoff: exponential from `retryDelay` (1 s), capped at `maxRetryDelay` (30 s), full
   jitter, a `Retry-After` honoured. Every client call is a `GET`, so a retry repeats no side
   effect. The `GlassnodeAPI` constructor applies the default (it depends on `x402`), exported as
-  `DEFAULT_MAX_RETRIES` (`2`) and `DEFAULT_X402_MAX_RETRIES` (`0`). `GlassnodeConfigSchema` is
-  unchanged: it stays an object schema and leaves an unset `maxRetries` `undefined`.
+  `DEFAULT_MAX_RETRIES` (`2`) and `DEFAULT_X402_MAX_RETRIES` (`0`). `GlassnodeConfigSchema`
+  stays an object schema but no longer fills in `maxRetries`: `parse()` leaves an unset value
+  `undefined` (it was `0`), and its output type is now `number | undefined`. Resolve it with
+  `?? DEFAULT_MAX_RETRIES` (or `DEFAULT_X402_MAX_RETRIES` with `x402`).
   `onRequest`/`onResponse` hook events report `maxAttempts: 3` by default.
   - **Behaviour change:** a call that used to fail at once on a transient error may now succeed,
     or fail only after up to two waits; the error is the last attempt's. `onRetry` hooks and the
