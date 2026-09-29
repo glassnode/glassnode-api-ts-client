@@ -22,17 +22,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           standalone: true
         env:
-          # The repo .npmrc sets ignore-scripts=true (supply-chain hardening), but the
-          # standalone pnpm (@pnpm/exe) needs its preinstall (setup.js picks the platform
-          # binary) or the pnpm bin is a stub that fails with "This: not found". Re-enable
-          # scripts for this bootstrap only; the project installs below still honor .npmrc.
+          # The standalone pnpm (@pnpm/exe) needs its preinstall (setup.js picks the platform
+          # binary) or the pnpm bin is a stub that fails with "This: not found". The action
+          # installs it with `npm ci` in its own directory and lockfile, where the repo .npmrc
+          # (ignore-scripts=true) is probably not read; this step-level override makes sure
+          # scripts run for that bootstrap whatever npm config applies. It is scoped to this
+          # step: the project installs below still honor the repo .npmrc.
           npm_config_ignore_scripts: 'false'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: 'pnpm'
@@ -76,21 +78,23 @@ jobs:
       - run: pnpm dlx publint
       - run: pnpm dlx @arethetypeswrong/cli --pack .
 
-  # Prove the package's advertised floor (engines: ">=18"). Vitest 5 needs Node >=22.12, so this
-  # job does not run the suite — it builds, smoke-imports the CJS entry and runs a plain-Node
-  # runtime smoke (a real AbortSignal.timeout() abort -> GlassnodeNetworkError timedOut) on Node 18.
-  compat-node18:
+  # Prove the package's advertised floor (engines: ">=22.0.0"). The main job runs on Node 24, and
+  # Vitest 5 needs Node >=22.12, so this job does not run the suite — it builds, smoke-imports the
+  # CJS entry and runs a plain-Node runtime smoke (a real AbortSignal.timeout() abort ->
+  # GlassnodeNetworkError timedOut) on the floor major. The job name is version-neutral so the
+  # rulesets' required check survives the next floor bump; only node-version changes then.
+  compat-node-floor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           standalone: true
         env:
           npm_config_ignore_scripts: 'false'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 18
+          node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build

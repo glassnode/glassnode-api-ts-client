@@ -408,7 +408,7 @@ function metricSchema(options: unknown): ZodType | undefined {
 /**
  * An AbortSignal that aborts (with the same `reason`) as soon as either input signal aborts, and a
  * `dispose` that removes the listeners it added. A small stand-in for `AbortSignal.any()`, which
- * only exists from Node 20.3 (this package supports Node >= 18). Calling `dispose` once the
+ * Node >= 22 has but older browsers the bundles run in do not. Calling `dispose` once the
  * attempt is over keeps a long-lived caller signal from accumulating listeners across calls.
  */
 function combineSignals(

@@ -72,7 +72,8 @@ npm install glassnode-api
 yarn add glassnode-api
 ```
 
-Requires Node.js >= 18 (it uses the global `fetch`), or a browser — see [Browser](#browser).
+Requires Node.js >= 22 (it uses the global `fetch`), or a browser — see [Browser](#browser). 1.0
+dropped Node.js 18 and 20, which are end-of-life; stay on 0.x if you cannot upgrade.
 You'll need a Glassnode API key — create one from your
 [Glassnode account](https://studio.glassnode.com/).
 
@@ -486,7 +487,7 @@ await api.callMetric('/market/mvrv', { a: 'BTC' }, { signal: AbortSignal.timeout
   `timedOut: true`. For a limit on the whole call, pass `signal: AbortSignal.timeout(ms)` instead
   (or as well).
 - Both together: each attempt aborts on whichever comes first. The client combines the two signals
-  itself (`AbortSignal.any()` needs Node 20.3+) and removes its listeners from your signal after
+  itself (`AbortSignal.any()` is missing from older browsers) and removes its listeners from your signal after
   every attempt, so one long-lived signal can be reused across many calls.
 - A custom `fetch` receives the signal as `init.signal` and must honor it for an in-flight request
   to be cancelled. With no signal and no timeout (per-call or config) and the key in the query
@@ -756,7 +757,7 @@ pnpm exec tsc -p tsconfig.examples.json       # type-check the examples
 ```
 
 Developing needs Node.js 24 (see `.nvmrc`; Vitest needs Node >= 22.12). The published package
-itself supports Node.js >= 18.
+itself supports Node.js >= 22.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to open a pull request: the full local check list,
 the version and changelog rules, and how releases work.

@@ -93,11 +93,47 @@
     unpaid attempts are ever retried.
   - **Opt out:** pass `maxRetries: 0` for the previous single-attempt behaviour.
 
+- **Node.js >= 22 is now required** (`engines.node` is `>=22.0.0`, was `>=18.0.0`) (#48). Node 18
+  reached end-of-life in April 2025 and Node 20 in April 2026; Node 22 is in maintenance until
+  April 2027. `@types/node` moves to the new floor (`^22`), so the compiler still rejects APIs newer
+  than the oldest supported Node. The CI floor job `compat-node18` becomes `compat-node-floor`
+  and runs on Node 22 (same steps: build, CJS `require` smoke, `scripts/smoke-timeout.mjs`). No
+  code or output changes: the `tsconfig*.json` `target`/`lib` are unchanged (the Node builds'
+  ES2022 already fits Node 22, and their ESM output also reaches browsers through bundlers; the
+  browser bundles stay ES2015), and the client keeps its own `AbortSignal.any()` stand-in for older
+  browsers.
+
+  **Migration:** upgrade to Node.js 22 or later. On Node 18 or 20, stay on 0.x: package managers
+  that enforce `engines` (e.g. with `engine-strict`) refuse to install 1.0, and it is not tested
+  there.
+
 ### Build
 
 - `tsconfig.browser.json` uses `module: ESNext` and `moduleResolution: bundler` instead of the
   deprecated `moduleResolution: node` (`node10`), so `build:browser` no longer warns TS5107 and
   keeps working on TypeScript 7 (#35). The browser bundles are byte-identical before and after.
+
+### Tooling
+
+No change to the published package (#50).
+
+- Dev dependencies, within their current majors and the `.npmrc` 7-day `minimum-release-age`:
+  `vitest` and `@vitest/coverage-v8` 5.0.1, `eslint` 10.11.0, `prettier` 3.9.8, `rollup` 4.63.4,
+  `typescript-eslint` 8.70.1, the `@x402/evm` / `@x402/fetch` dev copies 2.27.0 and `viem` 2.56.8.
+  TypeScript stays 6.0.3 (#39). `examples/`: `@x402/*` 2.27.0, `viem` 2.56.8 and `dotenv` 16.6.1
+  (still 16.x; the 17/18 majors are not taken), locked with `npm install --before=<7 days ago>`.
+  `pnpm audit` and `npm audit` (in `examples/`) report no vulnerabilities.
+- CI: every GitHub Action is pinned by full commit SHA with a `# vX.Y.Z` comment, and moved to its
+  latest major: `actions/checkout` v7.0.1, `actions/setup-node` v7.0.0, `pnpm/action-setup` v6.1.0,
+  `actions/deploy-pages` v5.0.1 (`configure-pages` v6.0.0 and `upload-pages-artifact` v5.0.0 were
+  already current). No input changes were needed: the workflows already set `cache: 'pnpm'`
+  explicitly (setup-node v5+ only auto-caches npm projects), `pnpm/action-setup` keeps
+  `standalone: true` with the `npm_config_ignore_scripts: 'false'` bootstrap override, and
+  `publish.yml` keeps overwriting setup-node's `.npmrc` (v7 writes
+  `_authToken=${NODE_AUTH_TOKEN}` + `registry=`) before the OIDC publish.
+- CI hardening: `publish.yml`'s `publish` job no longer restores the pnpm cache (`cache: 'pnpm'`
+  dropped). It holds `id-token: write` and `contents: write`, and setup-node's docs advise against
+  caching in privileged release jobs (cache poisoning). The other jobs keep their cache.
 
 ## 0.30.1
 
