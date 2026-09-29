@@ -15,7 +15,9 @@ This document provides context for Claude when working with this project.
     real API drift: fix the schema, never the fixture or the test
 - `/examples` - Example usage patterns (own `package.json`; type-checked via `tsconfig.examples.json`)
 - `/scripts` - `smoke-timeout.mjs`, the plain-Node runtime smoke run on the Node floor (22) in CI;
-  `record-fixtures.mjs`, which records the contract fixtures (needs an API key; run only to refresh)
+  `record-fixtures.mjs`, which records the contract fixtures (needs an API key; run only to refresh);
+  the release tooling `release-state.sh` + `release-plan.mjs` (publish.yml) and
+  `check-changelog-heading.mjs` (ci.yml), tested by `test/release-scripts.spec.ts`
 - `/typecheck/x402-node16` - consumer type-check fixture (node16 resolution, `skipLibCheck: false`)
 - `/dist` - Compiled output (not checked into git)
 - `/api-docs` - Generated TypeDoc API reference (`pnpm run docs`; not checked into git, never
@@ -212,13 +214,19 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
 `.github/workflows/ci.yml` runs on pull requests to `main` and to `release/**` branches, and
 `publish.yml` calls it (`workflow_call`) as its `verify` job, so a release runs the same checks:
 
-- `test` (Node 24): lint, `test:coverage` (thresholds in `vitest.config.ts`), `tsc` on
-  `tsconfig.test.json` and `tsconfig.examples.json`, an offline ts-node import of `../src` from
-  `examples/` (module-resolution guard, no example runs), `build`, `build:browser`, the
-  `typecheck/x402-node16` consumer check, `docs` (TypeDoc), `publint` and
+- `test` (Node 24): the CHANGELOG heading check (below), lint, `test:coverage` (thresholds in
+  `vitest.config.ts`), `tsc` on `tsconfig.test.json` and `tsconfig.examples.json`, an offline
+  ts-node import of `../src` from `examples/` (module-resolution guard, no example runs), `build`,
+  `build:browser`, the `typecheck/x402-node16` consumer check, `docs` (TypeDoc), `publint` and
   `@arethetypeswrong/cli --pack .`.
 - `compat-node-floor` (Node 22, the `engines` floor): build, CJS `require` smoke,
   `scripts/smoke-timeout.mjs`.
+
+The CHANGELOG heading check (`scripts/check-changelog-heading.mjs`, target = the PR's base branch,
+or `main` when `publish.yml` calls `ci.yml`): the top `## ` heading of `CHANGELOG.md` must be
+exactly `## <package.json version>`; into `release/**`, `## <x.y.z> (unreleased)` is also accepted
+(not compared with package.json, which a release branch does not bump). So a heading still marked
+"(unreleased)" fails the final release-branch PR into `main` until it is renamed.
 
 `.github/workflows/docs.yml` builds the API reference on every push to `main` and deploys it to
 GitHub Pages (https://glassnode.github.io/glassnode-api-ts-client/). It requires the repo setting
@@ -243,7 +251,9 @@ A major release is prepared on a long-lived `release/**` branch (e.g. `release/1
   `## 1.0.0 (unreleased)`-style heading at the top. The final PR from the release branch to `main`
   bumps `version` (e.g. to `1.0.0`) and renames that heading to exactly `## <version>` (e.g.
   `## 1.0.0`): `publish.yml` takes the GitHub Release notes from the line that equals
-  `## <version>`, so any suffix left on the heading leaves the Release without notes. Its merge
+  `## <version>`, so any suffix left on the heading leaves the Release without notes. `ci.yml`
+  enforces this (the CHANGELOG heading check, see [CI](#ci)): into `release/**` the
+  `(unreleased)` heading passes, into `main` only `## <package.json version>` does. Its merge
   publishes as usual.
 - **CI:** `ci.yml` runs on PRs into `release/**`, but that is not a merge gate by itself: the checks
   block a merge only if a ruleset for `release/**` requires them. Only PRs are CI-checked, not
@@ -265,15 +275,34 @@ A major release is prepared on a long-lived `release/**` branch (e.g. `release/1
      Only an E404 means "not published"; any other `npm view` failure (network, registry error)
      fails the job, never publishes. If the version is already on npm (a merge without a bump, a
      re-run), the run ends there with a notice in the job summary, and no approval is requested.
+     It also runs `npm view glassnode-api versions dist-tags` (same failure policy) and
+     `scripts/release-plan.mjs`, which picks the dist-tag and warns in the job summary about
+     skipped releases: `CHANGELOG.md` versions between the last published version (the highest
+     on npm below this one) and this one that are missing on npm.
   3. `publish` (`needs: [verify, release]`) runs in the `npm` **environment**, so it waits for a
-     required reviewer to approve. It re-checks npm, builds, runs `npm publish`, pushes the
-     `v<version>` tag on the published commit and creates a GitHub Release from the version's
-     `CHANGELOG.md` section. An existing tag on the same commit or an existing Release is fine; a
-     tag on another commit is left alone with a warning. If the version is on npm from this very
-     commit (npm records its `gitHead`), a re-run only (re)creates the missing tag and Release.
+     required reviewer to approve. It re-checks npm (and the dist-tag), builds, runs
+     `npm publish --tag <dist-tag>`, pushes the `v<version>` tag on the published commit and creates
+     a GitHub Release from the version's `CHANGELOG.md` section. An existing tag on the same commit
+     or an existing Release is fine; a tag on another commit is left alone with a warning. If the
+     version is on npm from this very commit (npm records its `gitHead`), a re-run only (re)creates
+     the missing tag and Release.
 - Only `publish` has write permissions: `id-token: write` (OIDC) and `contents: write` (the tag and
   Release, via `GITHUB_TOKEN`). A `npm-publish` concurrency group serializes publishes and never
-  cancels one in progress.
+  cancels one in progress, but GitHub keeps only **one pending** run per group: a newer merge's
+  publish replaces an older one still queued or awaiting approval, and that version is never
+  published (0.29.5 and 0.30.0, 2026-09-29, #33). Merge release PRs one at a time. To recover,
+  re-run the skipped version's run (CONTRIBUTING.md "Releases").
+- **Dist-tag guard** (`scripts/release-plan.mjs`, SemVer 2.0.0 precedence incl. prereleases, no
+  dependency): `npm publish` always gets an explicit `--tag`: `latest`, or
+  `backport-<major>.<minor>` for a version lower than the current `latest` (such a re-run), or
+  `next` for a prerelease, so `latest` never moves backwards. Not `v<major>.<minor>`: npm rejects a
+  tag name that is a valid semver range. That GitHub Release gets `--latest=false` (and
+  `--prerelease` for a prerelease version). A re-run uses its own commit's workflow, so a run from
+  before this guard (pre-1.0) publishes with npm's default tag: check `npm dist-tag ls` afterwards.
+  `release-state.sh` fails unless the tag matches `latest|next|backport-<n>.<n>`. `package.json`
+  `publishConfig` deliberately sets **no** `tag`: a `tag: "latest"` there would force `latest` on
+  a manual publish or an npm that does not let `--tag` override it (npm's default is `latest`
+  anyway). Keep it out.
 - It uses **npm Trusted Publishing (OIDC)** with provenance — there is **no `NPM_TOKEN`
   secret**. The Trusted Publisher for `glassnode-api` on npmjs.com must name repo
   `glassnode/glassnode-api-ts-client`, workflow `publish.yml` and environment `npm`.

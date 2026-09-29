@@ -38,6 +38,14 @@ jobs:
         with:
           node-version: 24
           cache: 'pnpm'
+      # The top CHANGELOG.md heading must be exactly `## <package.json version>` (publish.yml takes
+      # the GitHub Release notes from that line). Into release/** a `## <x.y.z> (unreleased)`
+      # heading is accepted too, so a heading still marked "(unreleased)" can never reach main.
+      # The target is the PR's base branch, or the pushed branch (main) when publish.yml calls this.
+      - name: Check the CHANGELOG.md heading
+        env:
+          TARGET_BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: node scripts/check-changelog-heading.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       # Enforce the coverage thresholds (vitest.config.ts), not just that tests pass.
