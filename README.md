@@ -27,8 +27,8 @@ Originally created by [Jordi Planadecursach](https://github.com/planadecu).
 - ✅ **Runtime-validated** — responses parsed and validated with Zod, so bad data fails fast
 - 🌐 **Universal** — Node.js (CJS + ESM) plus browser bundles (UMD + ESM); in web pages Glassnode's
   CORS policy applies — see [Browser](#browser)
-- 🔁 **Built-in retries** — opt-in retry with exponential backoff and jitter for `429`, `5xx`,
-  network failures and timeouts (honouring `Retry-After`)
+- 🔁 **Built-in retries** — on by default (2 retries), with exponential backoff and jitter for
+  `429`, `5xx`, network failures and timeouts (honouring `Retry-After`)
 - ⏹️ **Cancellable** — per-call `AbortSignal` and `timeout` on every method
 - 📦 **Bulk endpoints** — fetch every asset in a single call with `callBulkMetric()`
 - 🎯 **Typed errors** — every failure is a `GlassnodeError`; subclasses for HTTP, network/timeout,
@@ -56,6 +56,7 @@ Originally created by [Jordi Planadecursach](https://github.com/planadecu).
 - [Paid calls with x402](#paid-calls-with-x402)
 - [Browser](#browser)
 - [Examples](#examples)
+- [Stability and versioning](#stability-and-versioning)
 - [Development](#development)
 - [License](#license)
 
@@ -743,6 +744,43 @@ npm install           # dotenv, ts-node and the x402 peers used by the examples
 cp .env.example .env  # add GLASSNODE_API_KEY (or the X402_* variables for the x402 example)
 npx ts-node ex.metadata.validation.ts
 ```
+
+## Stability and versioning
+
+From 1.0.0 the package follows [semver](https://semver.org/).
+
+- **Public API:** exactly what `glassnode-api` and `glassnode-api/x402` export: the classes and
+  their methods, config and per-call option names, the error classes and their fields, the exported
+  constants, types and Zod schemas.
+- **Minor releases** may add new optional config options, methods or exports, new optional fields
+  in response schemas, and newly accepted input values.
+- **Major releases** are needed to:
+  - remove or rename an export, method or option, or change a default's behaviour;
+  - tighten a response schema (make a field required, narrow its type, reject values it accepts
+    today);
+  - widen an output type that code already reads: make an existing field optional or nullable, or
+    add a member to an exported union or enum that a response or event can carry (e.g.
+    `GlassnodeRetryReason`, `ExternalIdSource`). Both break code under `strictNullChecks` or with
+    an exhaustive `switch`;
+  - reject an input that used to be accepted. A minor or patch does so only as a bug fix, for input
+    that could never have worked (e.g. 0.30.1 rejecting a `callBulkMetric()` path ending in
+    `/bulk`, which always failed with a 404);
+  - raise the minimum Node.js version (currently 22);
+  - move to a new major of Zod or of an optional peer dependency (`@x402/fetch`, `@x402/evm`,
+    `viem`). The exported schemas are Zod 4 objects.
+- **Response parsing:** new object properties the API adds are ignored (stripped), so they never
+  fail a call. Map-like fields are the exception: in an asset's `external_ids`, a metric's
+  `descriptors.description` and `parameters`, the stats' `resolution` or a time series point's `o`,
+  a new key must have the map's value type, or the call fails with a `GlassnodeValidationError`.
+- **TypeScript:** no minimum version is pinned or tested in CI. The 1.0.0 typings type-check with
+  TypeScript 5.4 or later (Zod 4's typings use `NoInfer`), and Zod itself is tested on 5.5+.
+- **Browser bundles:** the client's own code is compiled to ES2015, but the bundled Zod keeps its
+  ES2020 syntax (`?.`, `??`), so the bundles need an ES2020 browser.
+- **Not covered:** internal modules (anything the two entry points do not export), the wording of
+  error messages (match on the error class and its fields instead), an error's `.cause` (the
+  original underlying error, whose shape is not ours), the text of the server-provided `detail`,
+  the `logger` output (except that a failing hook is reported as `'Hook <name> failed:', error`),
+  and the API's own data (which metrics, assets and values Glassnode returns).
 
 ## Development
 

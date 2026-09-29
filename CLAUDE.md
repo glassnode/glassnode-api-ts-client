@@ -147,17 +147,21 @@ the largest timer delay). Every method also takes optional per-call options as i
 
 Follow [semver](https://semver.org/):
 
-- **Major** (1.0.0 → 2.0.0): Breaking changes (removed/renamed exports, changed method signatures)
+- **Major** (1.0.0 → 2.0.0): Breaking changes (removed/renamed exports, changed method signatures,
+  changed defaults, tightened or widened response schemas, a higher minimum Node.js version)
 - **Minor** (0.4.0 → 0.5.0): New features, new methods, new config options (backward-compatible)
 - **Patch** (0.5.0 → 0.5.1): Bug fixes, docs, internal refactors (no API changes)
+
+Since 1.0.0, README "Stability and versioning" states what semver covers (public API, what a minor
+or a major may change); keep it in sync with this policy.
 
 **Before every commit**, you MUST:
 
 1. Bump `version` in `package.json` (patch, minor, or major as appropriate)
 2. Add a corresponding entry to `CHANGELOG.md` describing the changes
 
-Exception: PRs into `release/**` branches carry no version bump (they still add a CHANGELOG entry);
-see [Release branches](#release-branches).
+Exception: PRs into `release/**` branches carry no version bump (they still add a CHANGELOG entry),
+except the one that prepares the release; see [Release branches](#release-branches).
 
 The `version` in `package.json` is exactly what gets published: CI never bumps it. A change
 merged without a bump publishes nothing (see [Publishing](#publishing)).
@@ -225,8 +229,9 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
 The CHANGELOG heading check (`scripts/check-changelog-heading.mjs`, target = the PR's base branch,
 or `main` when `publish.yml` calls `ci.yml`): the top `## ` heading of `CHANGELOG.md` must be
 exactly `## <package.json version>`; into `release/**`, `## <x.y.z> (unreleased)` is also accepted
-(not compared with package.json, which a release branch does not bump). So a heading still marked
-"(unreleased)" fails the final release-branch PR into `main` until it is renamed.
+(not compared with package.json, which PRs into a release branch do not bump, except the release
+prep PR; see [Release branches](#release-branches)). So a heading still marked "(unreleased)"
+fails the final release-branch PR into `main` until it is renamed.
 
 `.github/workflows/docs.yml` builds the API reference on every push to `main` and deploys it to
 GitHub Pages (https://glassnode.github.io/glassnode-api-ts-client/). It requires the repo setting
@@ -246,15 +251,15 @@ and read the release notes for changed inputs or defaults.
 A major release is prepared on a long-lived `release/**` branch (e.g. `release/1.0`, cut from
 `main`); its breaking changes land there as separate PRs, and nothing publishes from it.
 
-- **Versioning:** PRs into `release/**` carry **no** version bump. Each one does add its
-  `CHANGELOG.md` entry, with migration notes for breaking changes, under a single
-  `## 1.0.0 (unreleased)`-style heading at the top. The final PR from the release branch to `main`
-  bumps `version` (e.g. to `1.0.0`) and renames that heading to exactly `## <version>` (e.g.
-  `## 1.0.0`): `publish.yml` takes the GitHub Release notes from the line that equals
-  `## <version>`, so any suffix left on the heading leaves the Release without notes. `ci.yml`
-  enforces this (the CHANGELOG heading check, see [CI](#ci)): into `release/**` the
-  `(unreleased)` heading passes, into `main` only `## <package.json version>` does. Its merge
-  publishes as usual.
+- **Versioning:** PRs into `release/**` carry **no** version bump (except the last one, below).
+  Each one does add its `CHANGELOG.md` entry, with migration notes for breaking changes, under a
+  single `## 1.0.0 (unreleased)`-style heading at the top. Before the release branch goes to `main`, a
+  last PR (into the release branch, or the final PR itself) bumps `version` (e.g. to `1.0.0`) and
+  renames that heading to exactly `## <version>` (e.g. `## 1.0.0`): `publish.yml` takes the GitHub
+  Release notes from the line that equals `## <version>`, so any suffix left on the heading leaves
+  the Release without notes. `ci.yml` enforces this (the CHANGELOG heading check, see [CI](#ci)):
+  into `release/**` the `(unreleased)` heading or `## <package.json version>` passes, into `main`
+  only the latter. The merge into `main` publishes as usual.
 - **CI:** `ci.yml` runs on PRs into `release/**`, but that is not a merge gate by itself: the checks
   block a merge only if a ruleset for `release/**` requires them. Only PRs are CI-checked, not
   direct pushes to the release branch; the combined state is checked by the final PR to `main`.

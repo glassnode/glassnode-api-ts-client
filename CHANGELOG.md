@@ -1,6 +1,18 @@
 # Changelog
 
-## 1.0.0 (unreleased)
+## 1.0.0
+
+1.0.0 is the first stable release: from here on the public API follows semver, as the README's
+[Stability and versioning](https://github.com/glassnode/glassnode-api-ts-client#stability-and-versioning)
+section defines. Breaking changes: deprecated exports removed, lenient `MetricMetadata` fields,
+`modified` as unix seconds, no `browser` field, `maxRetries` defaulting to `2` and Node.js >= 22;
+each has migration notes below.
+
+It also contains 0.29.4–0.30.1. Of those, only 0.30.1 reached npm: 0.29.4, 0.29.5 and 0.30.0 were
+never published and have no GitHub Release. If you are upgrading from 0.29.3 or earlier, read their
+sections in the full
+[CHANGELOG](https://github.com/glassnode/glassnode-api-ts-client/blob/main/CHANGELOG.md) too
+(notably 0.30.0's `BulkEntry['v']` type change).
 
 ### Breaking changes
 
@@ -15,7 +27,7 @@
   - `FetchFn`: use `GlassnodeFetch`, the type of the `fetch` config option, or `typeof fetch`
     (which `FetchFn` was an alias of; a standard `fetch` still fits the option).
 - `MetricMetadata` (from `getMetricMetadata()` / `MetricMetadataSchema`): `refs`, `queried` and
-  `parameters` are now optional, in line with the lenient response policy (0.12.0). A response
+  `parameters` are now optional, in line with the lenient response policy (0.12.0) (#25). A response
   that omits any of them now parses instead of rejecting the whole call; only `path` and `tier`
   stay required. An absent field is reported as sent, `undefined`, with no `{}` default. Their
   types become `… | undefined`, which breaks code that reads them directly (e.g.
@@ -83,8 +95,8 @@
     (jittered, up to 1 s then 2 s). A `Retry-After` wait replaces it, capped at `maxRetryDelay`
     (30 s by default, so up to about 60 s over two retries). For a deadline on the whole call,
     retries included, pass `signal: AbortSignal.timeout(ms)` (see README
-    "[Cancellation and per-call timeouts](README.md#cancellation-and-per-call-timeouts)"), or
-    lower `maxRetries` / `maxRetryDelay`.
+    "[Cancellation and per-call timeouts](https://github.com/glassnode/glassnode-api-ts-client#cancellation-and-per-call-timeouts)"),
+    or lower `maxRetries` / `maxRetryDelay`.
   - **x402 mode keeps `0`:** with `x402: true` the default stays `0`. The fetch from
     `createX402Fetch` never lets a failure after a signed payment be retried (it raises
     `GlassnodePaymentError`), but the client cannot tell whether a caller-supplied payment fetch
@@ -100,12 +112,20 @@
   and runs on Node 22 (same steps: build, CJS `require` smoke, `scripts/smoke-timeout.mjs`). No
   code or output changes: the `tsconfig*.json` `target`/`lib` are unchanged (the Node builds'
   ES2022 already fits Node 22, and their ESM output also reaches browsers through bundlers; the
-  browser bundles stay ES2015), and the client keeps its own `AbortSignal.any()` stand-in for older
-  browsers.
+  browser bundles' own code stays ES2015, while their bundled Zod is ES2020), and the client keeps
+  its own `AbortSignal.any()` stand-in for older browsers.
 
   **Migration:** upgrade to Node.js 22 or later. On Node 18 or 20, stay on 0.x: package managers
   that enforce `engines` (e.g. with `engine-strict`) refuse to install 1.0, and it is not tested
   there.
+
+### Docs
+
+- README: a new "Stability and versioning" section states what semver covers from 1.0: the public
+  API, what a minor or a major release may change (including widened output types, rejected
+  inputs, Zod and optional peer majors), how new response fields are parsed, the TypeScript and
+  browser baselines, and what is not covered. The Features
+  list no longer calls retries opt-in: they are on by default since the `maxRetries` change above.
 
 ### Build
 

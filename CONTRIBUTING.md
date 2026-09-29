@@ -53,21 +53,25 @@ newer than Node 22 in `src/`.
 Every change bumps `version` in `package.json` and adds an entry at the top of `CHANGELOG.md`
 describing it. Follow [semver](https://semver.org/):
 
-- **Major**: breaking changes (removed or renamed exports, changed method signatures, a higher
-  minimum Node.js version).
+- **Major**: breaking changes (removed or renamed exports, changed method signatures, changed
+  defaults, tightened or widened response schemas, a higher minimum Node.js version).
 - **Minor**: new features, methods or config options that are backward compatible.
 - **Patch**: bug fixes, docs and internal refactors with no API change.
+
+The README's [Stability and versioning](./README.md#stability-and-versioning) section spells out
+what counts as breaking.
 
 The version in your PR is exactly the one that gets published: the release workflow does not bump
 it. A PR merged without a bump publishes nothing.
 
 **Release branches.** A major release is prepared on a long-lived `release/**` branch (e.g.
-`release/1.0`). PRs into a release branch carry no version bump, but each still adds its
-`CHANGELOG.md` entry, with migration notes for breaking changes, under a single
-`## 1.0.0 (unreleased)`-style heading. The final PR from the release branch to `main` bumps the
-version (e.g. to `1.0.0`) and renames that heading to exactly `## 1.0.0`, the form the release
-workflow extracts the GitHub Release notes from. CI enforces it: into a release branch the top
-heading may be `## <x.y.z> (unreleased)`, into `main` it must be exactly `## <package.json version>`
+`release/1.0`). PRs into a release branch carry no version bump (except the last one, below), but
+each still adds its `CHANGELOG.md` entry, with migration notes for breaking changes, under a single
+`## 1.0.0 (unreleased)`-style heading. Before the release branch goes to `main`, a last PR (into
+the release branch, or the final PR itself) bumps the version (e.g. to `1.0.0`) and renames that
+heading to exactly `## 1.0.0`, the form the release workflow extracts the GitHub Release notes
+from. CI enforces it: into a release branch the top heading may be `## <x.y.z> (unreleased)` or
+`## <package.json version>`, into `main` it must be exactly `## <package.json version>`
 (`node scripts/check-changelog-heading.mjs <target branch>` runs the check locally). The release
 branch takes merges from `main` during its lifetime, and right after any CI change lands there: a
 PR's CI runs the `ci.yml` of its merge commit, so the release branch needs the current one. Only
