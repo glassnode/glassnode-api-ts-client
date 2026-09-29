@@ -11,6 +11,15 @@
 #                    so only (re)create the tag and the GitHub Release
 #   action=skip      the version is on npm from another commit (a merge that did not bump
 #                    `version`, or a later re-run): nothing to do
+#   dist_tag=<tag>   the npm dist-tag to publish under (scripts/release-plan.mjs): `latest`, or
+#                    `backport-<major>.<minor>` when the version is lower than the current
+#                    `latest` (a re-run of a cancelled older release), or `next` for a prerelease,
+#                    so `latest` never moves backwards
+#   latest=<version> the current `latest` dist-tag (empty when the package is not on npm)
+#
+# It also warns (annotation and job summary) about skipped releases: CHANGELOG versions between
+# the last published version and this one that are not on npm (their publish run was cancelled
+# by a later merge or never approved).
 #
 # `npm view` failure modes: only an E404 means "not published". Any other failure (network,
 # registry error, unparseable output) exits non-zero, so the job fails instead of publishing.
@@ -59,6 +68,20 @@ state=$(
   '
 )
 
+# The package's versions and dist-tags, for the dist-tag and the skipped-release check. Same
+# failure policy: an E404 (package never published) is fine, any other failure fails the job.
+set +e
+pkg_view=$(npm view "$name" versions dist-tags --json --prefer-online 2>/dev/null)
+pkg_rc=$?
+set -e
+plan=$(NPM_VIEW="$pkg_view" NPM_RC="$pkg_rc" VERSION="$version" node "$(dirname "$0")/release-plan.mjs") || {
+  echo "::error::Could not plan the release of $name@$version (see above)" >&2
+  exit 1
+}
+dist_tag=$(sed -n 's/^dist_tag=//p' <<<"$plan")
+latest=$(sed -n 's/^latest=//p' <<<"$plan")
+skipped=$(sed -n 's/^skipped=//p' <<<"$plan")
+
 case "$state" in
   missing)
     action='publish'
@@ -82,10 +105,28 @@ esac
   echo "version=$version"
   echo "tag=$tag"
   echo "action=$action"
+  echo "dist_tag=$dist_tag"
+  echo "latest=$latest"
 } >>"$out"
 
 echo "### Release: $action" >>"$summary"
 echo "$msg" >>"$summary"
+if [ "$dist_tag" != latest ]; then
+  echo "" >>"$summary"
+  if [ "$dist_tag" = next ]; then
+    echo "\`$version\` is a prerelease: it goes out under the \`next\` dist-tag, \`latest\` stays at \`${latest:-none}\`." >>"$summary"
+  else
+    echo "\`$version\` is lower than \`latest\` (\`$latest\`): it goes out under the \`$dist_tag\` dist-tag and \`latest\` does not move." >>"$summary"
+  fi
+fi
+if [ -n "$skipped" ]; then
+  echo "::warning::CHANGELOG versions never published to npm (publish run cancelled or not approved): $skipped"
+  {
+    echo ""
+    echo "> [!WARNING]"
+    echo "> These CHANGELOG versions, between the last published version and \`$version\`, are not on npm (their publish run was cancelled by a later merge or never approved): \`${skipped// /\`, \`}\`. See CONTRIBUTING.md \"Releases\" to recover."
+  } >>"$summary"
+fi
 if [ "$action" = publish ]; then
   echo "::notice::$name@$version is not on npm: will publish"
 else

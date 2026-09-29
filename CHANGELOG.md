@@ -134,6 +134,24 @@ No change to the published package (#50).
 - CI hardening: `publish.yml`'s `publish` job no longer restores the pnpm cache (`cache: 'pnpm'`
   dropped). It holds `id-token: write` and `contents: write`, and setup-node's docs advise against
   caching in privileged release jobs (cache poisoning). The other jobs keep their cache.
+- Release guards (#33). On 2026-09-29 the 0.29.5 and 0.30.0 publish runs were cancelled: GitHub
+  keeps one pending run per concurrency group, so a later merge's publish replaced them while they
+  waited for approval. No change to the published package.
+  - `publish.yml` always passes an explicit dist-tag to `npm publish`: `latest`, or
+    `backport-<major>.<minor>` for a version lower than the current `latest` (e.g. a re-run of a
+    cancelled release), or `next` for a prerelease, so `latest` never moves backwards. Such a
+    GitHub Release is not marked "Latest" (a prerelease is marked as one). The decision is in
+    `scripts/release-plan.mjs`: SemVer 2.0.0 comparison with prereleases, no new dependency.
+  - The release job summary warns about every `CHANGELOG.md` version between the last published
+    version and the one being released that is missing on npm.
+  - `ci.yml` checks the top `CHANGELOG.md` heading (`scripts/check-changelog-heading.mjs`): into
+    `main` it must be exactly `## <package.json version>`; into `release/**`,
+    `## <x.y.z> (unreleased)` is accepted too. A heading still marked "(unreleased)" cannot reach
+    `main`.
+  - CONTRIBUTING.md "Releases" and the `publish.yml` header explain the concurrency behaviour, the
+    recovery (re-run; an older version gets a non-`latest` tag) and "merge release PRs one at a
+    time". The scripts are tested in `test/release-scripts.spec.ts`, `release-state.sh` with a
+    fake `npm`.
 
 ## 0.30.1
 
