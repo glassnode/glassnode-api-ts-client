@@ -5,7 +5,7 @@
  *
  * - the call succeeds, i.e. the recorded response passes the library's Zod schema;
  * - the result has the documented shape and the recorded values (timestamps stay unix seconds,
- *   except `MetricMetadata.modified`, which becomes a `Date`);
+ *   `MetricMetadata.modified` included);
  * - the request URL the client builds matches the recorded endpoint and query, plus the `f=json`
  *   the client adds to metric data calls and the (query-string) API key;
  * - the fields the schemas strip from the real response are exactly the known, unmodelled ones
@@ -156,9 +156,9 @@ async function metricMetadataCase(
   expect(result.path).toBe(metadataPath(entry));
   expect(Number.isInteger(result.tier)).toBe(true);
   expect(result.tier).toBe(body.tier);
-  // The one converted time field: unix seconds → Date.
-  expect(result.modified).toBeInstanceOf(Date);
-  expect(result.modified!.getTime()).toBe(body.modified * 1000);
+  // `modified` stays unix seconds (a number), like every other time field.
+  expect(result.modified).toBe(body.modified);
+  expect(typeof result.modified).toBe('number');
   // `timerange` stays unix seconds (numbers).
   expect(result.timerange).toEqual(body.timerange);
   expect(typeof result.timerange!.min).toBe('number');

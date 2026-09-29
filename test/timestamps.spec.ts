@@ -4,18 +4,17 @@ import { mockRawMetricMetadataResponse } from './mocks/metadata.mock';
 
 /**
  * Pins the documented timestamp representation (see README "Timestamps"):
- * `MetricMetadata.modified` is a `Date`; every other time field stays unix seconds.
+ * every time field, `MetricMetadata.modified` included, stays unix seconds (a number).
  */
 describe('timestamp representation', () => {
   describe('MetricMetadata.modified', () => {
-    it('converts unix seconds into a Date', () => {
+    it('keeps unix seconds as a number', () => {
       const result = MetricMetadataSchema.parse({
         ...mockRawMetricMetadataResponse,
         modified: 1733829848,
       });
-      expect(result.modified).toBeInstanceOf(Date);
-      expect(result.modified!.getTime()).toBe(1733829848 * 1000);
-      expect(result.modified!.toISOString()).toBe('2024-12-10T11:24:08.000Z');
+      expect(result.modified).toBe(1733829848);
+      expect(typeof result.modified).toBe('number');
     });
 
     it('is undefined when the field is absent', () => {
@@ -25,9 +24,9 @@ describe('timestamp representation', () => {
       expect(result.modified).toBeUndefined();
     });
 
-    it('is undefined (not the 1970 epoch) when the API sends 0', () => {
+    it('passes 0 through as 0', () => {
       const result = MetricMetadataSchema.parse({ ...mockRawMetricMetadataResponse, modified: 0 });
-      expect(result.modified).toBeUndefined();
+      expect(result.modified).toBe(0);
     });
   });
 

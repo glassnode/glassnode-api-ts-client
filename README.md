@@ -302,19 +302,17 @@ Metrics with other shapes (e.g. an array `v`) can use any Zod schema of your own
 ## Timestamps
 
 The API sends every point in time (timestamp) as unix **seconds**, and the client passes them
-through as plain `number`s — with **one exception**, `MetricMetadata.modified`, which is converted
-to a `Date`:
+through as plain `number`s:
 
-| Field                                                  | Type                 |
-| ------------------------------------------------------ | -------------------- |
-| `MetricMetadata.modified`                              | `Date \| undefined`  |
-| `MetricMetadata.timerange.min` / `.max`                | `number` (unix secs) |
-| `BulkResponse[number].t`                               | `number` (unix secs) |
-| `t` in `callMetric()` results (raw JSON, typed by you) | `number` (unix secs) |
-| `TimeSeriesPoint.t` / `TimeSeriesObjectPoint.t`        | `number` (unix secs) |
+| Field                                                  | Type                              |
+| ------------------------------------------------------ | --------------------------------- |
+| `MetricMetadata.modified`                              | `number \| undefined` (unix secs) |
+| `MetricMetadata.timerange.min` / `.max`                | `number` (unix secs)              |
+| `BulkResponse[number].t`                               | `number` (unix secs)              |
+| `t` in `callMetric()` results (raw JSON, typed by you) | `number` (unix secs)              |
+| `TimeSeriesPoint.t` / `TimeSeriesObjectPoint.t`        | `number` (unix secs)              |
 
-`modified` is `undefined` when the API omits it **or sends `0`** (treated as "not recorded", not as
-1970-01-01). Convert any unix-second value with `new Date(t * 1000)`:
+Convert any unix-second value with `new Date(t * 1000)`:
 
 ```typescript
 const [latest] = (await api.callBulkMetric('/market/marketcap_usd')).slice(-1);

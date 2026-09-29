@@ -84,7 +84,9 @@ async function fetchExchangeBalanceMetadata() {
     console.log('✅ Exchange balance metadata:');
     console.log(`  Path: ${metadata.path}`);
     console.log(`  Tier: ${metadata.tier}`);
-    console.log(`  Modified: ${metadata.modified?.toISOString()}`);
+    const modified =
+      metadata.modified !== undefined ? new Date(metadata.modified * 1000).toISOString() : 'N/A';
+    console.log(`  Modified: ${modified}`);
     console.log(`  Bulk supported: ${metadata.bulk_supported ?? 'N/A'}`);
 
     // Display time range

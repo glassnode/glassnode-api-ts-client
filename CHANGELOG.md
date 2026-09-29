@@ -26,6 +26,23 @@
   `meta.refs?.docs`, `meta.queried?.a`, `meta.parameters?.a ?? []`,
   `Object.entries(meta.parameters ?? {})`.
 
+- `MetricMetadata.modified` is now unix **seconds** (`number | undefined`), passed through as the
+  API sends it, like every other time field (`timerange.min`/`max`, the time series and bulk `t`,
+  `callMetric()` results). It used to be the one field converted to a `Date`. The schema is now
+  `z.number().optional()`; README "Timestamps", the schema comments and
+  `examples/ex.metadata.validation.ts` are updated. No `toDate` helper is added:
+  `new Date(t * 1000)` already covers every field (#22).
+  - **Behaviour change:** `modified: 0` now passes through as `0`; it used to become `undefined`
+    ("no modification time recorded"). Absent is still `undefined`.
+  - **Migration:** convert explicitly where you need a `Date`:
+
+    ```ts
+    const modified = meta.modified !== undefined ? new Date(meta.modified * 1000) : undefined;
+    ```
+
+    To keep treating `0` as "not recorded", use `meta.modified || undefined` (or check for `0`)
+    before converting.
+
 ## 0.29.4
 
 - CI: `ci.yml` now also runs on pull requests into `release/**` branches (e.g. `release/1.0`), not

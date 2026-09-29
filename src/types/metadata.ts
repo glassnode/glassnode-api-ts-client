@@ -2,8 +2,7 @@
  * Metadata response types
  *
  * Timestamps: the API sends every point in time as unix **seconds** (a number). The schemas
- * pass them through unchanged — with one exception, `MetricMetadata.modified`, which is
- * converted to a JS `Date`. Convert the others yourself with `new Date(seconds * 1000)`.
+ * pass them all through unchanged; convert one yourself with `new Date(seconds * 1000)`.
  * Durations are not timestamps: the lag percentiles of {@link MetricStatsResponse} are lengths of
  * time in their entry's `unit` (e.g. seconds) and must not be passed to `new Date()`.
  */
@@ -179,17 +178,11 @@ export const MetricMetadataSchema = z.object({
   tier: z.number().int().nonnegative(),
 
   /**
-   * When the metric's metadata was last updated, as a JS `Date`.
-   *
-   * The API sends unix seconds; the schema converts them to a `Date` (the only time field
-   * that is converted — see `timerange` and the time series/bulk `t`, which stay numbers).
-   * `undefined` when the field is absent **or `0`**: `0` is treated as "no modification time
-   * recorded", not as 1970-01-01.
+   * When the metric's metadata was last updated, in unix seconds (as sent by the API, like
+   * every other time field). `undefined` when the API omits it. Convert with
+   * `new Date(modified * 1000)`.
    */
-  modified: z
-    .number()
-    .optional()
-    .transform((val) => (val ? new Date(val * 1000) : undefined)),
+  modified: z.number().optional(),
 
   /**
    * Whether this is a point-in-time metric
