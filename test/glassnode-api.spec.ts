@@ -1,6 +1,6 @@
 import { describe, it, expect, expectTypeOf, vi, type Mock } from 'vitest';
 import { GlassnodeAPI } from '../src/glassnode-api';
-import { GlassnodeApiError } from '../src/errors';
+import { GlassnodeApiError, GlassnodeValidationError } from '../src/errors';
 import { MetricMetadataSchema, type MetricMetadata } from '../src/types/metadata';
 import {
   API_KEY,
@@ -703,6 +703,42 @@ describe('GlassnodeAPI', () => {
       expect(result[0].bulk).toHaveLength(2);
       expect(result[0].bulk[0].a).toBe('BTC');
       expect(result[0].bulk[1].network).toBe('ethereum');
+    });
+
+    it('accepts a null value for one asset and keeps the other entries intact', async () => {
+      const mockData = [
+        {
+          t: 1,
+          bulk: [
+            { a: 'BTC', v: 1 },
+            { a: 'XYZ', v: null },
+            { a: 'ETH', v: 2, network: 'ethereum' },
+          ],
+        },
+      ];
+      const fetchFn = createMockFetch({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: mockData }),
+      });
+
+      const api = createApi(fetchFn);
+      const result = await api.callBulkMetric('/market/marketcap_usd');
+
+      expect(result).toEqual(mockData);
+      expect(result[0].bulk[1].v).toBeNull();
+    });
+
+    it('still rejects a non-numeric, non-null value', async () => {
+      const fetchFn = createMockFetch({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: [{ t: 1, bulk: [{ a: 'BTC', v: '1' }] }] }),
+      });
+
+      const api = createApi(fetchFn);
+
+      await expect(api.callBulkMetric('/market/marketcap_usd')).rejects.toThrow(
+        GlassnodeValidationError
+      );
     });
 
     it('should handle API errors', async () => {

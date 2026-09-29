@@ -125,6 +125,60 @@ describe('metric path validation', () => {
   });
 });
 
+describe('callBulkMetric path suffix', () => {
+  const okFetch = () =>
+    vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({ data: [] }) });
+
+  it.each(['/market/marketcap_usd/bulk', '/bulk'])(
+    'rejects %j (ending in /bulk) without calling fetch',
+    async (path) => {
+      const fetchFn = neverFetch();
+      const err = await caught(client(fetchFn).callBulkMetric(path, { a: '*' }));
+      expect(err).toBeInstanceOf(GlassnodeInputError);
+      expect((err as GlassnodeInputError).argument).toBe('metricPath');
+      expect((err as Error).message).toMatch(/^Invalid metricPath: /);
+      expect((err as Error).message).toMatch(/must not end in "\/bulk"/);
+      expect((err as Error).message).toContain('pass the base path');
+      // No URL or query string (the "?" of "did you mean …?" is fine; "?a=" is not).
+      expect((err as Error).message).not.toMatch(/https?:|\/v1\/|api_key|\?\w+=|&/);
+      expect((err as Error).message).not.toContain(API_KEY);
+      expect(fetchFn).not.toHaveBeenCalled();
+    }
+  );
+
+  it('suggests the base path', async () => {
+    const err = await caught(
+      client(neverFetch()).callBulkMetric('/market/marketcap_usd/bulk', { a: '*' })
+    );
+    expect((err as Error).message).toContain('"/market/marketcap_usd"');
+  });
+
+  it('still requests .../bulk for the base path', async () => {
+    const fetchFn = okFetch();
+    await client(fetchFn).callBulkMetric('/market/marketcap_usd', { a: '*' });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${DEFAULT_API_URL}/v1/metrics/market/marketcap_usd/bulk?a=*&f=json&api_key=${API_KEY}`
+    );
+  });
+
+  it('allows a segment that merely contains "bulk"', async () => {
+    const fetchFn = okFetch();
+    await client(fetchFn).callBulkMetric('/market/bulkiness');
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${DEFAULT_API_URL}/v1/metrics/market/bulkiness/bulk?f=json&api_key=${API_KEY}`
+    );
+  });
+
+  it('leaves callMetric with a /bulk path unaffected', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+    await client(fetchFn).callMetric('/market/marketcap_usd/bulk', { a: '*' });
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${DEFAULT_API_URL}/v1/metrics/market/marketcap_usd/bulk?a=*&f=json&api_key=${API_KEY}`
+    );
+  });
+});
+
 describe('reserved query parameters', () => {
   for (const method of PATH_METHODS) {
     it.each(['csv', 'CSV', 'xml', ''])(`${method} rejects f=%j`, async (f) => {
