@@ -120,7 +120,10 @@ constructor; an invalid config throws `GlassnodeConfigError`):
   errors, per-attempt timeouts); non-negative integer, default 2 (`0` disables retries). With
   `x402` the default is 0: the client cannot tell whether a custom payment fetch refuses to retry
   after a signed payment was sent (the `createX402Fetch` fetch does, raising a never-retried
-  `GlassnodePaymentError`), so a retry could pay twice. An explicit value always wins
+  `GlassnodePaymentError`), so a retry could pay twice. An explicit value always wins. The
+  constructor applies the default (`DEFAULT_MAX_RETRIES` / `DEFAULT_X402_MAX_RETRIES` in
+  `src/types/config.ts`), not the schema: `GlassnodeConfigSchema` must stay a plain `z.object`
+  (no `.transform()`), so `.shape`/`.pick`/`.extend`/`.partial` keep working
 - `retryDelay` (optional) - Base delay in ms between retries (default 1000, doubles each attempt,
   capped at `maxRetryDelay`, then full jitter; a `Retry-After` on a retried response is used
   instead, capped but not jittered)

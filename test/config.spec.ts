@@ -3,6 +3,8 @@ import {
   GlassnodeConfigSchema,
   DEFAULT_API_URL,
   X402_API_URL,
+  DEFAULT_MAX_RETRIES,
+  DEFAULT_X402_MAX_RETRIES,
   type GlassnodeConfig,
   type GlassnodeFetch,
   type Logger,
@@ -37,23 +39,45 @@ describe('GlassnodeConfigSchema', () => {
     expect(parsed.apiUrl).toBeUndefined();
   });
 
+  it('stays a plain object schema (.shape, .pick, .extend, .partial still work)', () => {
+    expect(GlassnodeConfigSchema.shape).toBeDefined();
+    expect(GlassnodeConfigSchema.shape.maxRetries).toBeDefined();
+    expect(typeof GlassnodeConfigSchema.pick).toBe('function');
+    expect(typeof GlassnodeConfigSchema.extend).toBe('function');
+    expect(typeof GlassnodeConfigSchema.partial).toBe('function');
+  });
+
   describe('maxRetries default', () => {
     const fetchFn = (async () => new Response()) as unknown as typeof fetch;
+    // The resolved value lives on the client; the schema only validates.
+    const resolved = (config: GlassnodeConfig) =>
+      // @ts-expect-error: reading a private property
+      new GlassnodeAPI(config).maxRetries as number;
 
-    it('defaults maxRetries to 2', () => {
-      expect(GlassnodeConfigSchema.parse({ apiKey: 'k' }).maxRetries).toBe(2);
+    it('exports the documented defaults: 2, and 0 in x402 mode', () => {
+      expect(DEFAULT_MAX_RETRIES).toBe(2);
+      expect(DEFAULT_X402_MAX_RETRIES).toBe(0);
     });
 
-    it('defaults maxRetries to 0 in x402 mode (a retry could pay twice with a fetch that is not from createX402Fetch)', () => {
-      expect(GlassnodeConfigSchema.parse({ x402: true, fetch: fetchFn }).maxRetries).toBe(0);
+    it('leaves an unset maxRetries undefined in the parsed config', () => {
+      expect(GlassnodeConfigSchema.parse({ apiKey: 'k' }).maxRetries).toBeUndefined();
+    });
+
+    it('the client defaults maxRetries to 2', () => {
+      expect(resolved({ apiKey: 'k' })).toBe(2);
+    });
+
+    it('the client defaults maxRetries to 0 in x402 mode (a retry could pay twice with a fetch that is not from createX402Fetch)', () => {
+      expect(resolved({ x402: true, fetch: fetchFn })).toBe(0);
+      // Even with an API key alongside x402.
+      expect(resolved({ x402: true, apiKey: 'k', fetch: fetchFn })).toBe(0);
     });
 
     it('keeps an explicit maxRetries in either mode, including 0', () => {
-      expect(GlassnodeConfigSchema.parse({ apiKey: 'k', maxRetries: 0 }).maxRetries).toBe(0);
+      expect(resolved({ apiKey: 'k', maxRetries: 0 })).toBe(0);
+      expect(resolved({ apiKey: 'k', maxRetries: 5 })).toBe(5);
+      expect(resolved({ x402: true, fetch: fetchFn, maxRetries: 3 })).toBe(3);
       expect(GlassnodeConfigSchema.parse({ apiKey: 'k', maxRetries: 5 }).maxRetries).toBe(5);
-      expect(
-        GlassnodeConfigSchema.parse({ x402: true, fetch: fetchFn, maxRetries: 3 }).maxRetries
-      ).toBe(3);
     });
 
     it('still rejects a negative or non-integer maxRetries', () => {

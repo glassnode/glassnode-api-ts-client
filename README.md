@@ -136,6 +136,11 @@ calls a custom `fetch` with a string URL, as `fetch(url)` or `fetch(url, init)`.
 `globalThis.fetch`, `vi.fn()` mocks, the fetch from `createX402Fetch()` and string-only custom
 fetches (`async (url: string, init?: RequestInit) => …`) all type-check.
 
+> **An x402-wrapped `fetch` requires `x402: true`.** Without it the client uses the default
+> `maxRetries: 2`, and a retry of a paid `5xx` or timeout through a payment fetch that does not
+> guard against it (e.g. a bare `wrapFetchWithPayment`) would sign a **new** payment. `x402: true`
+> keeps the default at `0`; see [Retries](#retries) and [Paid calls with x402](#paid-calls-with-x402).
+
 ### Keeping the API key out of URLs
 
 By default the key is sent as the `api_key` query parameter, so it is part of every request URL —
@@ -428,6 +433,11 @@ immediately with a `GlassnodeValidationError`.
 
 Non-retryable errors (e.g. `401`, `404`, a caller abort, invalid input) fail immediately without
 retrying. When every attempt fails, the call rejects with the last attempt's error.
+
+`timeout` is per attempt, so a failing call can take about `(maxRetries + 1) × timeout` plus the
+retry waits. For a deadline on the whole call, pass `signal: AbortSignal.timeout(ms)` (see
+[Cancellation and per-call timeouts](#cancellation-and-per-call-timeouts)). The defaults are also
+exported as `DEFAULT_MAX_RETRIES` (`2`) and `DEFAULT_X402_MAX_RETRIES` (`0`).
 
 With [x402](#paid-calls-with-x402) (`x402: true`), the default is `maxRetries: 0`: the client
 cannot tell whether the `fetch` it was given refuses to retry after a payment was sent, and a bare
