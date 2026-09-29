@@ -420,8 +420,7 @@ describe('GlassnodeAPI', () => {
       expect(result).toEqual(mockMetricMetadataResponse);
       expect(result.path).toBe('/distribution/balance_exchanges');
       expect(result.tier).toBe(2);
-      expect(result.modified).toBeInstanceOf(Date);
-      expect(result.modified!.getTime()).toBe(mockRawMetricMetadataResponse.modified! * 1000);
+      expect(result.modified).toBe(mockRawMetricMetadataResponse.modified);
     });
 
     it('leaves parameters_defaults undefined when the API omits it', async () => {
