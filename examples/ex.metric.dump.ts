@@ -12,7 +12,7 @@ async function runExamples() {
   const metricList = await api.getMetricList();
   for (const metric of metricList.slice(0, 10)) {
     const metricMetadata = await api.getMetricMetadata(metric);
-    const params = metricMetadata.parameters;
+    const params = metricMetadata.parameters ?? {};
     // create params object from params array
     const paramsObject: Record<string, string> = {};
     for (const param of Object.keys(params)) {

@@ -84,7 +84,9 @@ async function fetchExchangeBalanceMetadata() {
     console.log('✅ Exchange balance metadata:');
     console.log(`  Path: ${metadata.path}`);
     console.log(`  Tier: ${metadata.tier}`);
-    console.log(`  Modified: ${metadata.modified?.toISOString()}`);
+    const modified =
+      metadata.modified !== undefined ? new Date(metadata.modified * 1000).toISOString() : 'N/A';
+    console.log(`  Modified: ${modified}`);
     console.log(`  Bulk supported: ${metadata.bulk_supported ?? 'N/A'}`);
 
     // Display time range
@@ -97,18 +99,18 @@ async function fetchExchangeBalanceMetadata() {
     // Display available parameters
     console.log('\nAvailable parameters:');
     // Only print the first 3 values per parameter
-    Object.entries(metadata.parameters).forEach(([key, values]) => {
+    Object.entries(metadata.parameters ?? {}).forEach(([key, values]) => {
       console.log(`  ${key}: ${values.slice(0, 3).join(', ')}`);
     });
 
     // Display documentation links and metric variants
-    if (metadata.refs.docs) {
+    if (metadata.refs?.docs) {
       console.log(`\nDocumentation: ${metadata.refs.docs}`);
     }
-    if (metadata.refs.studio) {
+    if (metadata.refs?.studio) {
       console.log(`Studio: ${metadata.refs.studio}`);
     }
-    if (metadata.refs.metric_variant) {
+    if (metadata.refs?.metric_variant) {
       console.log('Metric variants:');
       Object.entries(metadata.refs.metric_variant).forEach(([key, value]) => {
         if (value) console.log(`  ${key}: ${value}`);
@@ -134,7 +136,7 @@ async function fetchExchangeBalanceWithParams() {
 
     // Display queried parameters
     console.log('\nQueried parameters:');
-    Object.entries(metadata.queried).forEach(([key, value]) => {
+    Object.entries(metadata.queried ?? {}).forEach(([key, value]) => {
       console.log(`  ${key}: ${value}`);
     });
   } catch (error) {

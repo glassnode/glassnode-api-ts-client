@@ -1,5 +1,183 @@
 # Changelog
 
+## 1.0.0
+
+1.0.0 is the first stable release: from here on the public API follows semver, as the README's
+[Stability and versioning](https://github.com/glassnode/glassnode-api-ts-client#stability-and-versioning)
+section defines. Breaking changes: deprecated exports removed, lenient `MetricMetadata` fields,
+`modified` as unix seconds, no `browser` field, `maxRetries` defaulting to `2` and Node.js >= 22;
+each has migration notes below.
+
+It also contains 0.29.4–0.30.1. Of those, only 0.30.1 reached npm: 0.29.4, 0.29.5 and 0.30.0 were
+never published and have no GitHub Release. If you are upgrading from 0.29.3 or earlier, read their
+sections in the full
+[CHANGELOG](https://github.com/glassnode/glassnode-api-ts-client/blob/main/CHANGELOG.md) too
+(notably 0.30.0's `BulkEntry['v']` type change).
+
+### Breaking changes
+
+- Removed the deprecated exports `MetricTierSchema`, `MetricTier`, `MetricDataTypeSchema`,
+  `MetricDataType` and `FetchFn` (#23). None of them was used by the client; they were deprecated
+  with a promise of removal in 1.0. Migration:
+  - `MetricTier` / `MetricTierSchema`: use `MetricMetadata['tier']`, a `number` (e.g. `2`). The
+    string enum (`'free' | 'tier1' | …`) never matched the API's `tier` field.
+  - `MetricDataType` / `MetricDataTypeSchema`: define your own enum if you need these values
+    (`'average' | 'sum' | 'count' | 'percentage' | 'ratio'`); no response was ever validated
+    against them.
+  - `FetchFn`: use `GlassnodeFetch`, the type of the `fetch` config option, or `typeof fetch`
+    (which `FetchFn` was an alias of; a standard `fetch` still fits the option).
+- `MetricMetadata` (from `getMetricMetadata()` / `MetricMetadataSchema`): `refs`, `queried` and
+  `parameters` are now optional, in line with the lenient response policy (0.12.0) (#25). A response
+  that omits any of them now parses instead of rejecting the whole call; only `path` and `tier`
+  stay required. An absent field is reported as sent, `undefined`, with no `{}` default. Their
+  types become `… | undefined`, which breaks code that reads them directly (e.g.
+  `meta.refs.docs` or `Object.keys(meta.parameters)`) under `strictNullChecks`. The recorded API
+  responses still carry all three, so runtime values do not change today.
+
+  **Migration:** read these fields with `?.` and a fallback where you need one, e.g.
+  `meta.refs?.docs`, `meta.queried?.a`, `meta.parameters?.a ?? []`,
+  `Object.entries(meta.parameters ?? {})`.
+
+- `MetricMetadata.modified` is now unix **seconds** (`number | undefined`), passed through as the
+  API sends it, like every other time field (`timerange.min`/`max`, the time series and bulk `t`,
+  `callMetric()` results). It used to be the one field converted to a `Date`. The schema is now
+  `z.number().optional()`; README "Timestamps", the schema comments and
+  `examples/ex.metadata.validation.ts` are updated. No `toDate` helper is added:
+  `new Date(t * 1000)` already covers every field (#22).
+  - **Behaviour change:** `modified: 0` now passes through as `0`; it used to become `undefined`
+    ("no modification time recorded"). Absent is still `undefined`.
+  - **Migration:** convert explicitly where you need a `Date`:
+
+    ```ts
+    const modified = meta.modified !== undefined ? new Date(meta.modified * 1000) : undefined;
+    ```
+
+    To keep treating `0` as "not recorded", use `meta.modified || undefined` (or check for `0`)
+    before converting.
+
+- `package.json` no longer has a top-level `browser` field; `unpkg` and `jsdelivr` fields point at
+  `dist/glassnode-api.umd.min.js` instead (#37). `exports` gets no `browser` condition, so
+  `exports`-aware tools (Node, webpack 5, Vite, esbuild, Rollup, TypeScript) resolve exactly as
+  before: the tree-shakeable ESM build (`import`) or CommonJS (`require`). Both bundles still ship
+  at the same paths.
+  - **CDNs:** the bare `https://unpkg.com/glassnode-api` URL now serves the UMD bundle. unpkg
+    ignores `browser`, so it used to serve the CommonJS `main` (`dist/index.js`), which fails in a
+    `<script>` tag. jsDelivr already served the UMD bundle through `browser` and still does,
+    through `jsdelivr`. Explicit `dist/…min.js` URLs are unchanged.
+  - **Who is affected:** tools that read `browser` and ignore `exports`, chiefly **Browserify**
+    (or a bundler with `exports` resolution turned off). Browserify now bundles `dist/index.js` plus
+    zod's CommonJS build instead of the UMD bundle. It still works, with the same API, but the
+    output is about 6× larger: about 186 KB gzipped instead of 31 KB.
+  - **Migration:** to keep the smaller bundle in Browserify, require the UMD file by path,
+    `require('glassnode-api/dist/glassnode-api.umd.min.js')`, or map `glassnode-api` to it (e.g.
+    with a `browser` field in your own `package.json`). Browserify ignores `exports`, so the deep
+    path resolves; `exports`-aware tools cannot import it, and do not need to. In a page, load it
+    with a `<script>` tag from a CDN or your own copy.
+  - webpack 4 is not affected: it could not parse the package before this change (the UMD bundle
+    uses `?.`) and still cannot (the ESM build targets ES2022). It needs `node_modules`
+    transpiled either way.
+
+- **`maxRetries` now defaults to `2`** (was `0`) (#49). A `429`, a `5xx` or a transport failure
+  (network error, per-attempt `timeout`) is retried up to twice (up to 3 attempts), with the
+  existing backoff: exponential from `retryDelay` (1 s), capped at `maxRetryDelay` (30 s), full
+  jitter, a `Retry-After` honoured. Every client call is a `GET`, so a retry repeats no side
+  effect. The `GlassnodeAPI` constructor applies the default (it depends on `x402`), exported as
+  `DEFAULT_MAX_RETRIES` (`2`) and `DEFAULT_X402_MAX_RETRIES` (`0`). `GlassnodeConfigSchema`
+  stays an object schema but no longer fills in `maxRetries`: `parse()` leaves an unset value
+  `undefined` (it was `0`), and its output type is now `number | undefined`. Resolve it with
+  `?? DEFAULT_MAX_RETRIES` (or `DEFAULT_X402_MAX_RETRIES` with `x402`).
+  `onRequest`/`onResponse` hook events report `maxAttempts: 3` by default.
+  - **Behaviour change:** a call that used to fail at once on a transient error may now succeed,
+    or fail only after up to two waits; the error is the last attempt's. `onRetry` hooks and the
+    `logger` now fire on those retries.
+  - **Worst-case latency:** `timeout` is per attempt, so with `timeout` set a failing call can now
+    take about 3 × `timeout` plus the backoff. The backoff is at most about 3 s with the defaults
+    (jittered, up to 1 s then 2 s). A `Retry-After` wait replaces it, capped at `maxRetryDelay`
+    (30 s by default, so up to about 60 s over two retries). For a deadline on the whole call,
+    retries included, pass `signal: AbortSignal.timeout(ms)` (see README
+    "[Cancellation and per-call timeouts](https://github.com/glassnode/glassnode-api-ts-client#cancellation-and-per-call-timeouts)"),
+    or lower `maxRetries` / `maxRetryDelay`.
+  - **x402 mode keeps `0`:** with `x402: true` the default stays `0`. The fetch from
+    `createX402Fetch` never lets a failure after a signed payment be retried (it raises
+    `GlassnodePaymentError`), but the client cannot tell whether a caller-supplied payment fetch
+    does the same, and a retry of a paid `5xx` or timeout through a bare x402 wrapper would sign a
+    new payment and could pay twice. With `createX402Fetch` you can opt in (`maxRetries: 2`): only
+    unpaid attempts are ever retried.
+  - **Opt out:** pass `maxRetries: 0` for the previous single-attempt behaviour.
+
+- **Node.js >= 22 is now required** (`engines.node` is `>=22.0.0`, was `>=18.0.0`) (#48). Node 18
+  reached end-of-life in April 2025 and Node 20 in April 2026; Node 22 is in maintenance until
+  April 2027. `@types/node` moves to the new floor (`^22`), so the compiler still rejects APIs newer
+  than the oldest supported Node. The CI floor job `compat-node18` becomes `compat-node-floor`
+  and runs on Node 22 (same steps: build, CJS `require` smoke, `scripts/smoke-timeout.mjs`). No
+  code or output changes: the `tsconfig*.json` `target`/`lib` are unchanged (the Node builds'
+  ES2022 already fits Node 22, and their ESM output also reaches browsers through bundlers; the
+  browser bundles' own code stays ES2015, while their bundled Zod is ES2020), and the client keeps
+  its own `AbortSignal.any()` stand-in for older browsers.
+
+  **Migration:** upgrade to Node.js 22 or later. On Node 18 or 20, stay on 0.x: package managers
+  that enforce `engines` (e.g. with `engine-strict`) refuse to install 1.0, and it is not tested
+  there.
+
+### Docs
+
+- README: a new "Stability and versioning" section states what semver covers from 1.0: the public
+  API, what a minor or a major release may change (including widened output types, rejected
+  inputs, Zod and optional peer majors), how new response fields are parsed, the TypeScript and
+  browser baselines, and what is not covered. The Features
+  list no longer calls retries opt-in: they are on by default since the `maxRetries` change above.
+
+### Build
+
+- `tsconfig.browser.json` uses `module: ESNext` and `moduleResolution: bundler` instead of the
+  deprecated `moduleResolution: node` (`node10`), so `build:browser` no longer warns TS5107 and
+  keeps working on TypeScript 7 (#35). The browser bundles are byte-identical before and after.
+
+### Tooling
+
+No change to the published package (#50).
+
+- Dev dependencies, within their current majors and the `.npmrc` 7-day `minimum-release-age`:
+  `vitest` and `@vitest/coverage-v8` 5.0.1, `eslint` 10.11.0, `prettier` 3.9.8, `rollup` 4.63.4,
+  `typescript-eslint` 8.70.1, the `@x402/evm` / `@x402/fetch` dev copies 2.27.0 and `viem` 2.56.8.
+  TypeScript stays 6.0.3 (#39). `examples/`: `@x402/*` 2.27.0, `viem` 2.56.8 and `dotenv` 16.6.1
+  (still 16.x; the 17/18 majors are not taken), locked with `npm install --before=<7 days ago>`.
+  `pnpm audit` and `npm audit` (in `examples/`) report no vulnerabilities.
+- CI: every GitHub Action is pinned by full commit SHA with a `# vX.Y.Z` comment, and moved to its
+  latest major: `actions/checkout` v7.0.1, `actions/setup-node` v7.0.0, `pnpm/action-setup` v6.1.0,
+  `actions/deploy-pages` v5.0.1 (`configure-pages` v6.0.0 and `upload-pages-artifact` v5.0.0 were
+  already current). No input changes were needed: the workflows already set `cache: 'pnpm'`
+  explicitly (setup-node v5+ only auto-caches npm projects), `pnpm/action-setup` keeps
+  `standalone: true` with the `npm_config_ignore_scripts: 'false'` bootstrap override, and
+  `publish.yml` keeps overwriting setup-node's `.npmrc` (v7 writes
+  `_authToken=${NODE_AUTH_TOKEN}` + `registry=`) before the OIDC publish.
+- CI hardening: `publish.yml`'s `publish` job no longer restores the pnpm cache (`cache: 'pnpm'`
+  dropped). It holds `id-token: write` and `contents: write`, and setup-node's docs advise against
+  caching in privileged release jobs (cache poisoning). The other jobs keep their cache.
+- Release guards (#33). On 2026-09-29 the 0.29.5 and 0.30.0 publish runs were cancelled: GitHub
+  keeps one pending run per concurrency group, so a later merge's publish replaced them while they
+  waited for approval. No change to the published package.
+  - `publish.yml` always passes an explicit dist-tag to `npm publish`: `latest`, or
+    `backport-<major>.<minor>` for a version lower than the current `latest` (e.g. a re-run of a
+    cancelled release), or `next` for a prerelease, so `latest` never moves backwards. Such a
+    GitHub Release is not marked "Latest" (a prerelease is marked as one). The decision is in
+    `scripts/release-plan.mjs`: SemVer 2.0.0 comparison with prereleases, no new dependency.
+    `release-state.sh` fails unless the tag is `latest`, `next` or `backport-<n>.<n>`.
+    `package.json` `publishConfig` no longer sets `tag: "latest"`: the guard relied on `--tag`
+    overriding it, and a manual publish or an older npm would still have forced `latest`. npm's
+    default tag is `latest` anyway (`npm publish --dry-run` still reports `latest`, and honours
+    `--tag backport-0.29`).
+  - The release job summary warns about every `CHANGELOG.md` version between the last published
+    version and the one being released that is missing on npm.
+  - `ci.yml` checks the top `CHANGELOG.md` heading (`scripts/check-changelog-heading.mjs`): into
+    `main` it must be exactly `## <package.json version>`; into `release/**`,
+    `## <x.y.z> (unreleased)` is accepted too. A heading still marked "(unreleased)" cannot reach
+    `main`.
+  - CONTRIBUTING.md "Releases" and the `publish.yml` header explain the concurrency behaviour, the
+    recovery (re-run; an older version gets a non-`latest` tag) and "merge release PRs one at a
+    time". The scripts are tested in `test/release-scripts.spec.ts`, `release-state.sh` with a
+    fake `npm` whose arguments are asserted.
+
 ## 0.30.1
 
 - Fix: `callBulkMetric()` now rejects a `metricPath` ending in `/bulk` (e.g. the metadata's

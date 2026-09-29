@@ -14,8 +14,10 @@ This document provides context for Claude when working with this project.
     client and its schemas. Never hand-edit the fixtures; re-record them. A schema failure there is
     real API drift: fix the schema, never the fixture or the test
 - `/examples` - Example usage patterns (own `package.json`; type-checked via `tsconfig.examples.json`)
-- `/scripts` - `smoke-timeout.mjs`, the plain-Node runtime smoke run on Node 18 in CI;
-  `record-fixtures.mjs`, which records the contract fixtures (needs an API key; run only to refresh)
+- `/scripts` - `smoke-timeout.mjs`, the plain-Node runtime smoke run on the Node floor (22) in CI;
+  `record-fixtures.mjs`, which records the contract fixtures (needs an API key; run only to refresh);
+  the release tooling `release-state.sh` + `release-plan.mjs` (publish.yml) and
+  `check-changelog-heading.mjs` (ci.yml), tested by `test/release-scripts.spec.ts`
 - `/typecheck/x402-node16` - consumer type-check fixture (node16 resolution, `skipLibCheck: false`)
 - `/dist` - Compiled output (not checked into git)
 - `/api-docs` - Generated TypeDoc API reference (`pnpm run docs`; not checked into git, never
@@ -46,17 +48,22 @@ This document provides context for Claude when working with this project.
 
 Keep these separate; they answer different questions:
 
-- **Consumers of the published package** need **Node.js >= 18**. This is the contract in
-  `package.json` `engines`. The shipped code uses only universal APIs plus global `fetch`
-  (stable since Node 18) — no `node:` builtins. To enforce this at compile time, `@types/node`
-  is pinned to the **floor** (`^18`), not the latest, so the compiler rejects any API newer
-  than Node 18. Do **not** bump `@types/node` to track the dev runtime — bump it only if the
-  minimum supported Node is intentionally raised (a breaking change → major/`engines` bump).
+- **Consumers of the published package** need **Node.js >= 22** (raised from 18 in 1.0; Node 18
+  and 20 are end-of-life). This is the contract in `package.json` `engines`. The shipped code
+  uses only universal APIs plus global `fetch` — no `node:` builtins — and also runs in browsers,
+  so the floor is not a licence to use Node-only APIs. To enforce the floor at compile time,
+  `@types/node` is pinned to the **floor** (`^22`), not the latest, so the compiler rejects any
+  API newer than Node 22. Both approximate the floor: `engines` says `>=22.0.0`, but the CI floor
+  job runs the latest 22.x and `@types/node` is `^22.20`, so an API added after 22.0 is not
+  caught. Do **not** bump `@types/node` to track the dev runtime — bump it only
+  if the minimum supported Node is intentionally raised (a breaking change → major/`engines`
+  bump).
 - **Developers of this repo** run **Node.js 24** (`.nvmrc`, the main CI and publish jobs). The dev toolchain
-  sets the floor here: `vitest` 5 requires Node `>= 22.12`, so the test suite cannot run on
-  Node 18/20 — that constraint is dev-only and never reaches consumers (vitest is a
-  devDependency). The CI `compat-node18` job proves the consumer floor instead: on Node 18 it
-  builds, `require`s the CJS entry and runs `scripts/smoke-timeout.mjs`.
+  sets the floor here: `vitest` 5 requires Node `>= 22.12` — that constraint is dev-only and never
+  reaches consumers (vitest is a devDependency). The CI `compat-node-floor` job proves the
+  consumer floor instead: on Node 22 it builds, `require`s the CJS entry and runs
+  `scripts/smoke-timeout.mjs`. Its name is version-neutral on purpose: the rulesets require it by
+  name, so a later floor bump changes only its `node-version`.
 
 ## Coding Standards
 
@@ -117,7 +124,13 @@ constructor; an invalid config throws `GlassnodeConfigError`):
 - `fetch` (optional) - Custom fetch function for testing or custom HTTP behavior (default
   `globalThis.fetch`)
 - `maxRetries` (optional) - Number of retries for 429/5xx responses and transport failures (network
-  errors, per-attempt timeouts); non-negative integer, default 0
+  errors, per-attempt timeouts); non-negative integer, default 2 (`0` disables retries). With
+  `x402` the default is 0: the client cannot tell whether a custom payment fetch refuses to retry
+  after a signed payment was sent (the `createX402Fetch` fetch does, raising a never-retried
+  `GlassnodePaymentError`), so a retry could pay twice. An explicit value always wins. The
+  constructor applies the default (`DEFAULT_MAX_RETRIES` / `DEFAULT_X402_MAX_RETRIES` in
+  `src/types/config.ts`), not the schema: `GlassnodeConfigSchema` must stay a plain `z.object`
+  (no `.transform()`), so `.shape`/`.pick`/`.extend`/`.partial` keep working
 - `retryDelay` (optional) - Base delay in ms between retries (default 1000, doubles each attempt,
   capped at `maxRetryDelay`, then full jitter; a `Retry-After` on a retried response is used
   instead, capped but not jittered)
@@ -134,17 +147,21 @@ the largest timer delay). Every method also takes optional per-call options as i
 
 Follow [semver](https://semver.org/):
 
-- **Major** (1.0.0 → 2.0.0): Breaking changes (removed/renamed exports, changed method signatures)
+- **Major** (1.0.0 → 2.0.0): Breaking changes (removed/renamed exports, changed method signatures,
+  changed defaults, tightened or widened response schemas, a higher minimum Node.js version)
 - **Minor** (0.4.0 → 0.5.0): New features, new methods, new config options (backward-compatible)
 - **Patch** (0.5.0 → 0.5.1): Bug fixes, docs, internal refactors (no API changes)
+
+Since 1.0.0, README "Stability and versioning" states what semver covers (public API, what a minor
+or a major may change); keep it in sync with this policy.
 
 **Before every commit**, you MUST:
 
 1. Bump `version` in `package.json` (patch, minor, or major as appropriate)
 2. Add a corresponding entry to `CHANGELOG.md` describing the changes
 
-Exception: PRs into `release/**` branches carry no version bump (they still add a CHANGELOG entry);
-see [Release branches](#release-branches).
+Exception: PRs into `release/**` branches carry no version bump (they still add a CHANGELOG entry),
+except the one that prepares the release; see [Release branches](#release-branches).
 
 The `version` in `package.json` is exactly what gets published: CI never bumps it. A change
 merged without a bump publishes nothing (see [Publishing](#publishing)).
@@ -158,10 +175,21 @@ merged without a bump publishes nothing (see [Publishing](#publishing)).
   the folder as ESM. `exports` uses per-condition `types` (ESM `.d.ts` for `import`, CJS for
   `require`) — verified with `publint` + `@arethetypeswrong/cli` in CI.
 - **Browser**: Rollup (`tsconfig.browser.json`) produces minified UMD
-  (`dist/glassnode-api.umd.min.js`, global `GlassnodeAPI`, the `browser` field) and minified ESM
+  (`dist/glassnode-api.umd.min.js`, global `GlassnodeAPI`) and minified ESM
   (`dist/glassnode-api.esm.min.js`) bundles from `src/index.ts`, with `zod` bundled in and
   `src/x402.ts` excluded. The `module` field points at the unbundled `dist/esm/index.js`, not a
   Rollup bundle. Source maps are generated `hidden` and not published.
+  `tsconfig.browser.json` uses `module: ESNext` + `moduleResolution: bundler` (not the deprecated
+  `node`/`node10`, which TypeScript 7 drops); `@rollup/plugin-node-resolve` does the actual
+  resolution, so the setting only affects type-checking.
+- **CDN entry**: the `unpkg` and `jsdelivr` fields point at the UMD bundle, so the bare package URL
+  on those CDNs serves it (unpkg never read `browser`: it served the CJS `main` before 1.0). There
+  is deliberately **no** top-level `browser` field and **no** `browser` condition in `exports`. A
+  `browser` condition inside `exports` would steer webpack 5, Vite and esbuild
+  (`platform: 'browser'`) to the pre-minified bundle with `zod` inlined instead of the
+  tree-shakeable ESM build. The top-level field is ignored by them whenever `exports` exists; it
+  only affected `exports`-unaware tools such as Browserify. Keep both out, even though `publint`
+  suggested the condition (#37).
 - Config: `tsconfig.json` (CJS), `tsconfig.esm.json` (ESM), `tsconfig.browser.json` (browser),
   `tsconfig.test.json` (tests/IDE), `tsconfig.examples.json` (type-checks `examples/` against
   `src/` using root deps), `examples/tsconfig.json` (ts-node config for running the examples;
@@ -190,12 +218,20 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
 `.github/workflows/ci.yml` runs on pull requests to `main` and to `release/**` branches, and
 `publish.yml` calls it (`workflow_call`) as its `verify` job, so a release runs the same checks:
 
-- `test` (Node 24): lint, `test:coverage` (thresholds in `vitest.config.ts`), `tsc` on
-  `tsconfig.test.json` and `tsconfig.examples.json`, an offline ts-node import of `../src` from
-  `examples/` (module-resolution guard, no example runs), `build`, `build:browser`, the
-  `typecheck/x402-node16` consumer check, `docs` (TypeDoc), `publint` and
+- `test` (Node 24): the CHANGELOG heading check (below), lint, `test:coverage` (thresholds in
+  `vitest.config.ts`), `tsc` on `tsconfig.test.json` and `tsconfig.examples.json`, an offline
+  ts-node import of `../src` from `examples/` (module-resolution guard, no example runs), `build`,
+  `build:browser`, the `typecheck/x402-node16` consumer check, `docs` (TypeDoc), `publint` and
   `@arethetypeswrong/cli --pack .`.
-- `compat-node18` (Node 18): build, CJS `require` smoke, `scripts/smoke-timeout.mjs`.
+- `compat-node-floor` (Node 22, the `engines` floor): build, CJS `require` smoke,
+  `scripts/smoke-timeout.mjs`.
+
+The CHANGELOG heading check (`scripts/check-changelog-heading.mjs`, target = the PR's base branch,
+or `main` when `publish.yml` calls `ci.yml`): the top `## ` heading of `CHANGELOG.md` must be
+exactly `## <package.json version>`; into `release/**`, `## <x.y.z> (unreleased)` is also accepted
+(not compared with package.json, which PRs into a release branch do not bump, except the release
+prep PR; see [Release branches](#release-branches)). So a heading still marked "(unreleased)"
+fails the final release-branch PR into `main` until it is renamed.
 
 `.github/workflows/docs.yml` builds the API reference on every push to `main` and deploys it to
 GitHub Pages (https://glassnode.github.io/glassnode-api-ts-client/). It requires the repo setting
@@ -204,18 +240,26 @@ Settings → Pages → Source: **GitHub Actions**.
 Its concurrency group cancels superseded runs only for pull requests; a run called by
 `publish.yml` gets its own group and is never cancelled.
 
+Every action in the workflows is pinned by full commit SHA with a `# vX.Y.Z` comment (supply-chain
+hardening), never by a movable tag. To bump one, resolve the tag with
+`gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (for an annotated tag, dereference it with
+`gh api repos/<owner>/<repo>/git/tags/<sha>` to get the commit), update SHA and comment together,
+and read the release notes for changed inputs or defaults.
+
 ### Release branches
 
 A major release is prepared on a long-lived `release/**` branch (e.g. `release/1.0`, cut from
 `main`); its breaking changes land there as separate PRs, and nothing publishes from it.
 
-- **Versioning:** PRs into `release/**` carry **no** version bump. Each one does add its
-  `CHANGELOG.md` entry, with migration notes for breaking changes, under a single
-  `## 1.0.0 (unreleased)`-style heading at the top. The final PR from the release branch to `main`
-  bumps `version` (e.g. to `1.0.0`) and renames that heading to exactly `## <version>` (e.g.
-  `## 1.0.0`): `publish.yml` takes the GitHub Release notes from the line that equals
-  `## <version>`, so any suffix left on the heading leaves the Release without notes. Its merge
-  publishes as usual.
+- **Versioning:** PRs into `release/**` carry **no** version bump (except the last one, below).
+  Each one does add its `CHANGELOG.md` entry, with migration notes for breaking changes, under a
+  single `## 1.0.0 (unreleased)`-style heading at the top. Before the release branch goes to `main`, a
+  last PR (into the release branch, or the final PR itself) bumps `version` (e.g. to `1.0.0`) and
+  renames that heading to exactly `## <version>` (e.g. `## 1.0.0`): `publish.yml` takes the GitHub
+  Release notes from the line that equals `## <version>`, so any suffix left on the heading leaves
+  the Release without notes. `ci.yml` enforces this (the CHANGELOG heading check, see [CI](#ci)):
+  into `release/**` the `(unreleased)` heading or `## <package.json version>` passes, into `main`
+  only the latter. The merge into `main` publishes as usual.
 - **CI:** `ci.yml` runs on PRs into `release/**`, but that is not a merge gate by itself: the checks
   block a merge only if a ruleset for `release/**` requires them. Only PRs are CI-checked, not
   direct pushes to the release branch; the combined state is checked by the final PR to `main`.
@@ -231,20 +275,39 @@ A major release is prepared on a long-lived `release/**` branch (e.g. `release/1
 - `main` is protected by a ruleset: no direct pushes, changes land through PRs with the
   required CI checks. Every change reaches `main` through a merged PR.
 - On every push to `main` (a merge):
-  1. `verify` runs `ci.yml` (the full CI check list, `test` and `compat-node18`), read-only.
+  1. `verify` runs `ci.yml` (the full CI check list, `test` and `compat-node-floor`), read-only.
   2. `release` (read-only) runs `scripts/release-state.sh`: `npm view glassnode-api@<version>`.
      Only an E404 means "not published"; any other `npm view` failure (network, registry error)
      fails the job, never publishes. If the version is already on npm (a merge without a bump, a
      re-run), the run ends there with a notice in the job summary, and no approval is requested.
+     It also runs `npm view glassnode-api versions dist-tags` (same failure policy) and
+     `scripts/release-plan.mjs`, which picks the dist-tag and warns in the job summary about
+     skipped releases: `CHANGELOG.md` versions between the last published version (the highest
+     on npm below this one) and this one that are missing on npm.
   3. `publish` (`needs: [verify, release]`) runs in the `npm` **environment**, so it waits for a
-     required reviewer to approve. It re-checks npm, builds, runs `npm publish`, pushes the
-     `v<version>` tag on the published commit and creates a GitHub Release from the version's
-     `CHANGELOG.md` section. An existing tag on the same commit or an existing Release is fine; a
-     tag on another commit is left alone with a warning. If the version is on npm from this very
-     commit (npm records its `gitHead`), a re-run only (re)creates the missing tag and Release.
+     required reviewer to approve. It re-checks npm (and the dist-tag), builds, runs
+     `npm publish --tag <dist-tag>`, pushes the `v<version>` tag on the published commit and creates
+     a GitHub Release from the version's `CHANGELOG.md` section. An existing tag on the same commit
+     or an existing Release is fine; a tag on another commit is left alone with a warning. If the
+     version is on npm from this very commit (npm records its `gitHead`), a re-run only (re)creates
+     the missing tag and Release.
 - Only `publish` has write permissions: `id-token: write` (OIDC) and `contents: write` (the tag and
   Release, via `GITHUB_TOKEN`). A `npm-publish` concurrency group serializes publishes and never
-  cancels one in progress.
+  cancels one in progress, but GitHub keeps only **one pending** run per group: a newer merge's
+  publish replaces an older one still queued or awaiting approval, and that version is never
+  published (0.29.5 and 0.30.0, 2026-09-29, #33). Merge release PRs one at a time. To recover,
+  re-run the skipped version's run (CONTRIBUTING.md "Releases").
+- **Dist-tag guard** (`scripts/release-plan.mjs`, SemVer 2.0.0 precedence incl. prereleases, no
+  dependency): `npm publish` always gets an explicit `--tag`: `latest`, or
+  `backport-<major>.<minor>` for a version lower than the current `latest` (such a re-run), or
+  `next` for a prerelease, so `latest` never moves backwards. Not `v<major>.<minor>`: npm rejects a
+  tag name that is a valid semver range. That GitHub Release gets `--latest=false` (and
+  `--prerelease` for a prerelease version). A re-run uses its own commit's workflow, so a run from
+  before this guard (pre-1.0) publishes with npm's default tag: check `npm dist-tag ls` afterwards.
+  `release-state.sh` fails unless the tag matches `latest|next|backport-<n>.<n>`. `package.json`
+  `publishConfig` deliberately sets **no** `tag`: a `tag: "latest"` there would force `latest` on
+  a manual publish or an npm that does not let `--tag` override it (npm's default is `latest`
+  anyway). Keep it out.
 - It uses **npm Trusted Publishing (OIDC)** with provenance — there is **no `NPM_TOKEN`
   secret**. The Trusted Publisher for `glassnode-api` on npmjs.com must name repo
   `glassnode/glassnode-api-ts-client`, workflow `publish.yml` and environment `npm`.

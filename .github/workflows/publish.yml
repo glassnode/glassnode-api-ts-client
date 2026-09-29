@@ -9,6 +9,20 @@ name: Publish Package
 #            GitHub Release from the CHANGELOG section
 # A merge that does not bump `version`, or a re-run after a successful release, skips the
 # publish (and the approval) with a notice in the job summary.
+#
+# Concurrency (the `npm-publish` group on the publish job): an in-progress publish is never
+# cancelled, but GitHub keeps at most ONE pending run per group. A newer merge's publish job
+# replaces (cancels) an older one still waiting in the queue or for its approval, so that older
+# version is never published. This happened on 2026-09-29 to 0.29.5 and 0.30.0 (#33). Hence:
+#   - Merge release PRs one at a time: wait for each publish to finish before the next merge.
+#   - The `release` job warns in the summary about any CHANGELOG version between the last
+#     published one and this one that is missing on npm (scripts/release-plan.mjs).
+#   - To recover, re-run the cancelled version's workflow run (its commit still carries that
+#     version). If a higher version is already `latest`, it is published under the
+#     `backport-<major>.<minor>` dist-tag instead, so `latest` never moves backwards; a
+#     prerelease goes out under `next`. Its GitHub Release is then not marked "Latest".
+#     A re-run uses the workflow of its own commit: one older than this guard publishes with npm's
+#     default tag, so check `npm dist-tag ls` afterwards (CONTRIBUTING.md "Releases").
 on:
   push:
     branches:
@@ -31,12 +45,13 @@ jobs:
       action: ${{ steps.state.outputs.action }}
       version: ${{ steps.state.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
       # Fails the job (rather than publishing) if npm cannot be queried; only a 404 means
-      # "not published".
+      # "not published". Also picks the dist-tag and warns about skipped (never published)
+      # CHANGELOG versions in the job summary.
       - id: state
         run: scripts/release-state.sh
 
@@ -57,37 +72,39 @@ jobs:
       contents: write # push the v<version> tag and create the GitHub Release
       id-token: write # npm Trusted Publishing (OIDC) and provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           standalone: true
         env:
-          # The repo .npmrc sets ignore-scripts=true (supply-chain hardening), but the
-          # standalone pnpm (@pnpm/exe) needs its preinstall (setup.js picks the platform
-          # binary) or the pnpm bin is a stub that fails with "This: not found". Re-enable
-          # scripts for this bootstrap only; the project installs below still honor .npmrc.
+          # The standalone pnpm (@pnpm/exe) needs its preinstall (setup.js picks the platform
+          # binary) or the pnpm bin is a stub that fails with "This: not found". The action
+          # installs it with `npm ci` in its own directory and lockfile, where the repo .npmrc
+          # (ignore-scripts=true) is probably not read; this step-level override makes sure
+          # scripts run for that bootstrap whatever npm config applies. It is scoped to this
+          # step: the project installs below still honor the repo .npmrc.
           npm_config_ignore_scripts: 'false'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          # registry-url is required so npm knows the registry for the OIDC exchange.
-          # npm CLI (>= 11.5.1) detects the OIDC environment and authenticates with it
-          # BEFORE falling back to the setup-node placeholder token, so no NODE_AUTH_TOKEN
-          # is set on the publish step. (pnpm publish does NOT do this — it uses the
-          # placeholder and 404s — which is why we publish with npm below.)
+          # registry-url is required so npm knows the registry for the OIDC exchange. No cache
+          # here: this job holds id-token: write and contents: write, and setup-node's docs advise
+          # against restoring a cache in privileged release jobs (cache poisoning).
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
-      # setup-node's registry-url writes an .npmrc with `always-auth=true` and a placeholder
-      # `_authToken`, which forces npm to send the fake token instead of doing the OIDC
-      # exchange (→ E404). Overwrite it with just the registry so npm has no token and must
-      # authenticate via OIDC trusted publishing.
-      - name: Clean npmrc so npm uses OIDC (not the placeholder token)
+      # With registry-url, setup-node v7 writes a user .npmrc (NPM_CONFIG_USERCONFIG) containing
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and `registry=…`, and no longer
+      # exports a placeholder NODE_AUTH_TOKEN (v4–v6 did). We set no NODE_AUTH_TOKEN: npm must
+      # authenticate via OIDC trusted publishing, not a configured token. The `_authToken` line
+      # still names a token (an unset variable) for the registry, which can pre-empt or break the
+      # OIDC path, so overwrite the file with just the registry. We publish with npm (>= 11.5.1
+      # does the OIDC exchange), not pnpm publish, which does not and 404s.
+      - name: Clean npmrc so npm uses OIDC (no configured token)
         run: printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
       # npm >= 11.5.1 performs the OIDC exchange.
       - run: npm install -g npm@latest
       - run: npm --version
       # Re-check right before publishing: the approval may have waited while another run
-      # published this version.
+      # published this version, or moved `latest` (which decides the dist-tag).
       - id: state
         run: scripts/release-state.sh
       - if: steps.state.outputs.action == 'publish'
@@ -103,12 +120,18 @@ jobs:
       # provenance (publishConfig.provenance). Requires a Trusted Publisher configured for this
       # package on npmjs.com: repo glassnode/glassnode-api-ts-client, workflow publish.yml,
       # environment npm.
+      # The dist-tag is always explicit: `latest`, or `backport-<major>.<minor>` for a version
+      # lower than the current `latest` (a re-run of a cancelled older release) and `next` for a
+      # prerelease, so `latest` never moves backwards (scripts/release-plan.mjs).
       - if: steps.state.outputs.action == 'publish'
-        run: npm publish
+        env:
+          DIST_TAG: ${{ steps.state.outputs.dist_tag }}
+        run: npm publish --tag "$DIST_TAG"
       - if: steps.state.outputs.action == 'publish'
         env:
           VERSION: ${{ steps.state.outputs.version }}
-        run: echo "Published \`glassnode-api@$VERSION\` to npm." >> "$GITHUB_STEP_SUMMARY"
+          DIST_TAG: ${{ steps.state.outputs.dist_tag }}
+        run: echo "Published \`glassnode-api@$VERSION\` to npm under the \`$DIST_TAG\` dist-tag." >> "$GITHUB_STEP_SUMMARY"
       # Tag the published commit. An existing tag on this commit is fine (re-run); one on another
       # commit is left alone with a warning, and the GitHub Release is then skipped.
       - name: Push the v<version> tag
@@ -145,13 +168,16 @@ jobs:
             exit 1
           fi
       # The release notes are the package.json version's section of CHANGELOG.md (from its
-      # `## <version>` heading to the next `## ` heading).
+      # `## <version>` heading to the next `## ` heading). Only a version published as npm
+      # `latest` becomes the repository's "Latest" GitHub Release; a backport does not, and a
+      # prerelease is marked as one.
       - name: Create the GitHub Release
         if: steps.tag.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.state.outputs.tag }}
           VERSION: ${{ steps.state.outputs.version }}
+          DIST_TAG: ${{ steps.state.outputs.dist_tag }}
         run: |
           if gh release view "$TAG" > /dev/null 2> view.err; then
             echo "GitHub Release \`$TAG\` already exists." >> "$GITHUB_STEP_SUMMARY"
@@ -170,5 +196,8 @@ jobs:
             echo "::warning::CHANGELOG.md has no '## $VERSION' section; the release links to it instead."
             echo "See [CHANGELOG.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/CHANGELOG.md)." > notes.md
           fi
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md
+          flags=()
+          if [ "$DIST_TAG" != latest ]; then flags+=(--latest=false); fi
+          case "${VERSION%%+*}" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md "${flags[@]}"
           echo "Created GitHub Release \`$TAG\`." >> "$GITHUB_STEP_SUMMARY"

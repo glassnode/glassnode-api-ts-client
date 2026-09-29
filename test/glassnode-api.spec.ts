@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, type Mock } from 'vitest';
+import { afterEach, describe, it, expect, expectTypeOf, vi, type Mock } from 'vitest';
 import { GlassnodeAPI } from '../src/glassnode-api';
 import { GlassnodeApiError, GlassnodeValidationError } from '../src/errors';
+import { MetricMetadataSchema, type MetricMetadata } from '../src/types/metadata';
 import {
   API_KEY,
   DEFAULT_API_URL,
@@ -26,8 +27,10 @@ function createMockFetch(response: Partial<Response>) {
   return vi.fn().mockResolvedValue(response);
 }
 
+// A single attempt: the tests built on this helper check what one request or one failure
+// produces. Retries (on by default) are covered by the 'retry logic' and 'default retries' tests.
 function createApi(fetchFn: Mock) {
-  return new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn });
+  return new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, maxRetries: 0 });
 }
 
 describe('GlassnodeAPI', () => {
@@ -130,7 +133,12 @@ describe('GlassnodeAPI', () => {
           Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' })
         );
 
-      const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, timeout: 10 });
+      const api = new GlassnodeAPI({
+        apiKey: API_KEY,
+        fetch: fetchFn,
+        timeout: 10,
+        maxRetries: 0,
+      });
 
       await expect(api.getMetricList()).rejects.toThrow(
         'Glassnode API error: The operation was aborted'
@@ -268,7 +276,12 @@ describe('GlassnodeAPI', () => {
         const fetchFn = vi
           .fn()
           .mockRejectedValue(new Error(`connect failed (X-Api-Key: ${API_KEY})`));
-        const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, apiKeyLocation });
+        const api = new GlassnodeAPI({
+          apiKey: API_KEY,
+          fetch: fetchFn,
+          apiKeyLocation,
+          maxRetries: 0,
+        });
 
         const err = await api.getMetricList().catch((e: unknown) => e);
         expect((err as Error).message).toBe('Glassnode API error: connect failed (X-Api-Key: ***)');
@@ -419,8 +432,7 @@ describe('GlassnodeAPI', () => {
       expect(result).toEqual(mockMetricMetadataResponse);
       expect(result.path).toBe('/distribution/balance_exchanges');
       expect(result.tier).toBe(2);
-      expect(result.modified).toBeInstanceOf(Date);
-      expect(result.modified!.getTime()).toBe(mockRawMetricMetadataResponse.modified! * 1000);
+      expect(result.modified).toBe(mockRawMetricMetadataResponse.modified);
     });
 
     it('leaves parameters_defaults undefined when the API omits it', async () => {
@@ -451,6 +463,38 @@ describe('GlassnodeAPI', () => {
 
         expect(result.parameters_defaults).toEqual(parametersDefaults);
       }
+    });
+
+    it('requires only path and tier: refs, queried and parameters are optional', () => {
+      const result = MetricMetadataSchema.safeParse({ path: '/x', tier: 1 });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ path: '/x', tier: 1 });
+      // The fields' types admit `undefined` (read them with `?.`).
+      expectTypeOf<undefined>().toExtend<MetricMetadata['refs']>();
+      expectTypeOf<undefined>().toExtend<MetricMetadata['queried']>();
+      expectTypeOf<MetricMetadata['parameters']>().toEqualTypeOf<
+        Record<string, string[]> | undefined
+      >();
+
+      const missing = MetricMetadataSchema.safeParse({});
+      expect(missing.success).toBe(false);
+      expect(missing.error!.issues.map((i) => i.path.join('.')).sort()).toEqual(['path', 'tier']);
+    });
+
+    it('leaves refs, queried and parameters undefined (not {}) when the API omits them', async () => {
+      const raw: Record<string, unknown> = { ...mockRawMetricMetadataResponse };
+      delete raw.refs;
+      delete raw.queried;
+      delete raw.parameters;
+      const fetchFn = createMockFetch({ ok: true, json: vi.fn().mockResolvedValue(raw) });
+
+      const result = await createApi(fetchFn).getMetricMetadata('/distribution/balance_exchanges');
+
+      expect(result.path).toBe('/distribution/balance_exchanges');
+      expect(result).not.toHaveProperty('refs');
+      expect(result).not.toHaveProperty('queried');
+      expect(result).not.toHaveProperty('parameters');
     });
 
     it('rejects parameters_defaults whose values are not string arrays', async () => {
@@ -1007,6 +1051,67 @@ describe('GlassnodeAPI', () => {
 
       expect(result).toEqual(mockMetricListResponse);
       expect(fetchFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('default retries (maxRetries: 2)', () => {
+    const unavailable = () =>
+      vi.fn().mockResolvedValue({ ok: false, status: 503, statusText: 'Service Unavailable' });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('retries a 503 twice (3 attempts) and then throws, with the default config', async () => {
+      // Full jitter picks a delay in [0, base]; pin it to 0 so the default 1000 ms base does not
+      // slow the test down. Everything else is the default config.
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      const fetchFn = unavailable();
+      const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn });
+
+      const error = await api.getMetricList().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(GlassnodeApiError);
+      expect((error as GlassnodeApiError).status).toBe(503);
+      expect(fetchFn).toHaveBeenCalledTimes(3);
+    });
+
+    it('retries a network error by default and succeeds', async () => {
+      const fetchFn = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        });
+      const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, retryDelay: 1 });
+
+      await expect(api.getMetricList()).resolves.toEqual(mockMetricListResponse);
+      expect(fetchFn).toHaveBeenCalledTimes(3);
+    });
+
+    it('maxRetries: 0 makes a single attempt', async () => {
+      const fetchFn = unavailable();
+      const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, maxRetries: 0 });
+
+      await expect(api.getMetricList()).rejects.toThrow(GlassnodeApiError);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('makes a single attempt by default in x402 mode', async () => {
+      const fetchFn = unavailable();
+      const api = new GlassnodeAPI({ x402: true, fetch: fetchFn, retryDelay: 1 });
+
+      await expect(api.getMetricList()).rejects.toThrow(GlassnodeApiError);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('honours an explicit maxRetries in x402 mode', async () => {
+      const fetchFn = unavailable();
+      const api = new GlassnodeAPI({ x402: true, fetch: fetchFn, maxRetries: 2, retryDelay: 1 });
+
+      await expect(api.getMetricList()).rejects.toThrow(GlassnodeApiError);
+      expect(fetchFn).toHaveBeenCalledTimes(3);
     });
   });
 

@@ -163,7 +163,12 @@ describe('per-call options: signal', () => {
   });
 
   it('a caller abort is distinguishable from a timeout', async () => {
-    const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: hangingFetch(), timeout: 20 });
+    const api = new GlassnodeAPI({
+      apiKey: API_KEY,
+      fetch: hangingFetch(),
+      timeout: 20,
+      maxRetries: 0,
+    });
 
     const timeoutErr = await caught(api.getMetricList());
     expect(timeoutErr).toBeInstanceOf(GlassnodeNetworkError);
@@ -206,7 +211,12 @@ describe('per-call options: timeout', () => {
   });
 
   it('a shorter per-call timeout overrides a long config timeout', async () => {
-    const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: hangingFetch(), timeout: 60_000 });
+    const api = new GlassnodeAPI({
+      apiKey: API_KEY,
+      fetch: hangingFetch(),
+      timeout: 60_000,
+      maxRetries: 0,
+    });
     const started = Date.now();
     const err = await caught(api.getMetricList({ timeout: 20 }));
     expect((err as GlassnodeNetworkError).timedOut).toBe(true);
@@ -225,7 +235,7 @@ describe('per-call options: timeout', () => {
           });
         })
     );
-    const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, timeout: 20 });
+    const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, timeout: 20, maxRetries: 0 });
     await expect(api.getMetricList()).rejects.toBeInstanceOf(GlassnodeNetworkError);
     await expect(api.getMetricList({ timeout: 5_000 })).resolves.toEqual(mockMetricListResponse);
   });
@@ -252,7 +262,7 @@ describe('per-call options: signal + timeout', () => {
   });
 
   it('the timeout still fires through the combined signal as timedOut', async () => {
-    const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: hangingFetch() });
+    const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: hangingFetch(), maxRetries: 0 });
     const controller = new AbortController();
     const err = await caught(api.getMetricList({ signal: controller.signal, timeout: 20 }));
     expect(err).toBeInstanceOf(GlassnodeNetworkError);

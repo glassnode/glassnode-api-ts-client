@@ -9,7 +9,7 @@ the release** (`.github/workflows/publish.yml`). `main` only accepts changes thr
 ## Prerequisites
 
 - **Node.js 24** for development (see `.nvmrc`; the test runner, Vitest, needs Node >= 22.12).
-  Consumers of the published package only need Node.js >= 18.
+  Consumers of the published package only need Node.js >= 22.
 - **pnpm** (the version is pinned in `package.json` `packageManager`; `corepack enable` picks it
   up).
 
@@ -40,36 +40,42 @@ Project layout:
 - `src/types/` - Zod schemas and the types inferred from them
 - `test/` - Vitest tests, including the contract tests in `test/contract.spec.ts`
 - `examples/` - runnable usage examples (their own `package.json`)
-- `scripts/` - the Node 18 smoke test and the contract fixture recorder
+- `scripts/` - the Node-floor smoke test, the contract fixture recorder and the release tooling
 - `typecheck/x402-node16/` - a consumer type-check fixture
 
 Add or update tests for what you change. The public API is what `src/index.ts` and `src/x402.ts`
 export; if you change it, update `README.md` to match and give every new export a doc comment.
-The shipped code must keep running on Node.js 18 and in browsers: no `node:` built-ins and no APIs
-newer than Node 18 in `src/`.
+The shipped code must keep running on Node.js 22 and in browsers: no `node:` built-ins and no APIs
+newer than Node 22 in `src/`.
 
 ### 3. Bump the version and add a changelog entry
 
 Every change bumps `version` in `package.json` and adds an entry at the top of `CHANGELOG.md`
 describing it. Follow [semver](https://semver.org/):
 
-- **Major**: breaking changes (removed or renamed exports, changed method signatures, a higher
-  minimum Node.js version).
+- **Major**: breaking changes (removed or renamed exports, changed method signatures, changed
+  defaults, tightened or widened response schemas, a higher minimum Node.js version).
 - **Minor**: new features, methods or config options that are backward compatible.
 - **Patch**: bug fixes, docs and internal refactors with no API change.
+
+The README's [Stability and versioning](./README.md#stability-and-versioning) section spells out
+what counts as breaking.
 
 The version in your PR is exactly the one that gets published: the release workflow does not bump
 it. A PR merged without a bump publishes nothing.
 
 **Release branches.** A major release is prepared on a long-lived `release/**` branch (e.g.
-`release/1.0`). PRs into a release branch carry no version bump, but each still adds its
-`CHANGELOG.md` entry, with migration notes for breaking changes, under a single
-`## 1.0.0 (unreleased)`-style heading. The final PR from the release branch to `main` bumps the
-version (e.g. to `1.0.0`) and renames that heading to exactly `## 1.0.0`, the form the release
-workflow extracts the GitHub Release notes from. The release branch takes merges from `main`
-during its lifetime, and right after any CI change lands there: a PR's CI runs the `ci.yml` of its
-merge commit, so the release branch needs the current one. Only PRs into it are CI-checked, not
-direct pushes; the final PR to `main` checks the combined result.
+`release/1.0`). PRs into a release branch carry no version bump (except the last one, below), but
+each still adds its `CHANGELOG.md` entry, with migration notes for breaking changes, under a single
+`## 1.0.0 (unreleased)`-style heading. Before the release branch goes to `main`, a last PR (into
+the release branch, or the final PR itself) bumps the version (e.g. to `1.0.0`) and renames that
+heading to exactly `## 1.0.0`, the form the release workflow extracts the GitHub Release notes
+from. CI enforces it: into a release branch the top heading may be `## <x.y.z> (unreleased)` or
+`## <package.json version>`, into `main` it must be exactly `## <package.json version>`
+(`node scripts/check-changelog-heading.mjs <target branch>` runs the check locally). The release
+branch takes merges from `main` during its lifetime, and right after any CI change lands there: a
+PR's CI runs the `ci.yml` of its merge commit, so the release branch needs the current one. Only
+PRs into it are CI-checked, not direct pushes; the final PR to `main` checks the combined result.
 
 ### 4. Run the full local check list
 
@@ -112,6 +118,28 @@ The merge starts the release workflow. It re-runs the full CI check list, then i
 waits for a maintainer to approve it (the `npm` environment). After the approval it publishes the
 new version to npm with provenance, tags the commit `v<version>` and creates a GitHub Release from
 your `CHANGELOG.md` entry. If that version is already on npm, the workflow skips the release.
+
+## Releases (for maintainers)
+
+**Merge release PRs one at a time.** Publishes run one after another (the `npm-publish`
+concurrency group), and one in progress is never cancelled. But GitHub keeps only **one pending**
+run per group: when a newer merge's publish job queues up, it replaces an older one that is still
+waiting, including one waiting for its approval. That older version is then never published. This
+happened to 0.29.5 and 0.30.0 on 2026-09-29. Wait for each release to finish (published, tagged,
+GitHub Release created) before merging the next PR that bumps the version.
+
+**Detecting a skipped version.** Every release run's summary lists, as a warning, each
+`CHANGELOG.md` version between the last one published to npm and the one being released that is
+missing on npm.
+
+**Recovering.** Open the skipped version's workflow run (Actions → Publish Package, the merge
+commit that carries that version) and choose **Re-run all jobs**, then approve the publish. If a
+higher version is already npm's `latest`, the older one is published under the
+`backport-<major>.<minor>` dist-tag (e.g. `backport-0.29`) instead, so `latest` never moves
+backwards, and its GitHub Release is not marked "Latest". A prerelease version is published under
+`next`. A run from a commit older than this guard (1.0.0) publishes with npm's default tag, so after
+re-running one, check `npm dist-tag ls glassnode-api`; if `latest` moved backwards, a maintainer
+restores it with `npm dist-tag add glassnode-api@<newest version> latest`.
 
 ## Contract fixtures
 

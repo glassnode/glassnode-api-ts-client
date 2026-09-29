@@ -103,7 +103,9 @@ export function createMaxAmountPolicy(maxAtomic: bigint) {
  *
  * A rejection of, or a non-2xx answer to, the *unpaid* request (no payment signed yet) is passed
  * through unchanged, so the client still reports and retries it (`GlassnodeNetworkError`, or
- * `GlassnodeApiError` for `429`/`5xx`). A `402` the server returns to the paid request (it
+ * `GlassnodeApiError` for `429`/`5xx`) when retries are enabled: in `x402` mode `maxRetries`
+ * defaults to 0, and an explicit value is safe with this fetch because only unpaid attempts are
+ * ever retried. A `402` the server returns to the paid request (it
  * refused the payment) is not an error here either; the client reports it as `GlassnodeApiError`
  * (status 402), which it never retries.
  */

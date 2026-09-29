@@ -5,6 +5,8 @@ import {
   GlassnodeFetch,
   DEFAULT_API_URL,
   X402_API_URL,
+  DEFAULT_MAX_RETRIES,
+  DEFAULT_X402_MAX_RETRIES,
 } from './types/config.js';
 import type { z, ZodType, ZodError } from 'zod';
 import {
@@ -406,7 +408,7 @@ function metricSchema(options: unknown): ZodType | undefined {
 /**
  * An AbortSignal that aborts (with the same `reason`) as soon as either input signal aborts, and a
  * `dispose` that removes the listeners it added. A small stand-in for `AbortSignal.any()`, which
- * only exists from Node 20.3 (this package supports Node >= 18). Calling `dispose` once the
+ * Node >= 22 has but older browsers the bundles run in do not. Calling `dispose` once the
  * attempt is over keeps a long-lived caller signal from accumulating listeners across calls.
  */
 function combineSignals(
@@ -544,7 +546,11 @@ export class GlassnodeAPI {
     this.logger = validatedConfig.logger;
     this.hooks = validatedConfig.hooks;
     this.fetchFn = validatedConfig.fetch ?? globalThis.fetch;
-    this.maxRetries = validatedConfig.maxRetries;
+    // The default depends on `x402`, so it is applied here rather than in the schema (which stays
+    // a plain object schema): a retry through a caller-supplied payment fetch could pay twice.
+    this.maxRetries =
+      validatedConfig.maxRetries ??
+      (validatedConfig.x402 ? DEFAULT_X402_MAX_RETRIES : DEFAULT_MAX_RETRIES);
     this.retryDelay = validatedConfig.retryDelay;
     this.maxRetryDelay = validatedConfig.maxRetryDelay;
     this.timeout = validatedConfig.timeout;

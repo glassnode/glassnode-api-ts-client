@@ -2,8 +2,7 @@
  * Metadata response types
  *
  * Timestamps: the API sends every point in time as unix **seconds** (a number). The schemas
- * pass them through unchanged — with one exception, `MetricMetadata.modified`, which is
- * converted to a JS `Date`. Convert the others yourself with `new Date(seconds * 1000)`.
+ * pass them all through unchanged; convert one yourself with `new Date(seconds * 1000)`.
  * Durations are not timestamps: the lag percentiles of {@link MetricStatsResponse} are lengths of
  * time in their entry's `unit` (e.g. seconds) and must not be passed to `new Date()`.
  */
@@ -147,43 +146,6 @@ export const AssetMetadataResponseSchema = z.array(AssetMetadataSchema);
 export type AssetMetadataResponse = z.infer<typeof AssetMetadataResponseSchema>;
 
 /**
- * Metric tier schema
- *
- * @deprecated Not used by any schema or client method, and it does not match the API:
- * the `tier` field on metric metadata is a number (e.g. `2`), not one of these strings.
- * Use `MetricMetadata['tier']` (a `number`) to type it instead. This export will be
- * removed in the next major release (1.0).
- */
-export const MetricTierSchema = z.enum(['free', 'tier1', 'tier2', 'tier3', 'tier4', 'tier5']);
-
-/**
- * Metric tier type
- *
- * @deprecated Does not match the API: the `tier` field on metric metadata is a number
- * (e.g. `2`), not one of these strings. Use `MetricMetadata['tier']` (a `number`) instead.
- * This export will be removed in the next major release (1.0).
- */
-export type MetricTier = z.infer<typeof MetricTierSchema>;
-
-/**
- * Metric data type schema
- *
- * @deprecated Not used by any schema or client method and not validated against any
- * API response. If you need these values, define your own enum. This export will be
- * removed in the next major release (1.0).
- */
-export const MetricDataTypeSchema = z.enum(['average', 'sum', 'count', 'percentage', 'ratio']);
-
-/**
- * Metric data type
- *
- * @deprecated Not used by any schema or client method and not validated against any
- * API response. If you need these values, define your own type. This export will be
- * removed in the next major release (1.0).
- */
-export type MetricDataType = z.infer<typeof MetricDataTypeSchema>;
-
-/**
  * Metric descriptors schema (human-readable names, tags, descriptions)
  */
 export const MetricDescriptorsSchema = z.object({
@@ -211,23 +173,16 @@ export const MetricMetadataSchema = z.object({
 
   /**
    * Access tier required for this metric, as a non-negative integer (e.g. `2`).
-   * Type it as `MetricMetadata['tier']`; the deprecated string-based `MetricTier`
-   * does not describe this field.
+   * Type it as `MetricMetadata['tier']`.
    */
   tier: z.number().int().nonnegative(),
 
   /**
-   * When the metric's metadata was last updated, as a JS `Date`.
-   *
-   * The API sends unix seconds; the schema converts them to a `Date` (the only time field
-   * that is converted — see `timerange` and the time series/bulk `t`, which stay numbers).
-   * `undefined` when the field is absent **or `0`**: `0` is treated as "no modification time
-   * recorded", not as 1970-01-01.
+   * When the metric's metadata was last updated, in unix seconds (as sent by the API, like
+   * every other time field). `undefined` when the API omits it. Convert with
+   * `new Date(modified * 1000)`.
    */
-  modified: z
-    .number()
-    .optional()
-    .transform((val) => (val ? new Date(val * 1000) : undefined)),
+  modified: z.number().optional(),
 
   /**
    * Whether this is a point-in-time metric
@@ -257,29 +212,36 @@ export const MetricMetadataSchema = z.object({
     .optional(),
 
   /**
-   * Reference links for this metric
+   * Reference links for this metric (docs, Studio, variant paths). Optional: `undefined` when the
+   * API omits it, so read it with `?.` (e.g. `meta.refs?.docs`).
    */
-  refs: z.object({
-    docs: z.string().optional(),
-    studio: z.string().optional(),
-    metric_variant: z
-      .object({
-        base: z.string().optional(),
-        bulk: z.string().optional(),
-        pit: z.string().optional(),
-      })
-      .optional(),
-  }),
+  refs: z
+    .object({
+      docs: z.string().optional(),
+      studio: z.string().optional(),
+      metric_variant: z
+        .object({
+          base: z.string().optional(),
+          bulk: z.string().optional(),
+          pit: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 
   /**
-   * Queried parameters for the metric
+   * The request's parameters as the API echoes them back (e.g. `{ path: '/market/price_usd_close' }`,
+   * plus `a` when an asset was passed). Optional: `undefined` when the API omits it, so read it
+   * with `?.`.
    */
-  queried: z.record(z.string(), z.any()),
+  queried: z.record(z.string(), z.any()).optional(),
 
   /**
-   * List of all allowed parameters and their values for the metric
+   * All allowed parameters of the metric and their values, keyed by parameter name (e.g.
+   * `{ a: ['BTC', 'ETH', …], i: ['24h', …] }`). Optional, with no `{}` default: `undefined` when
+   * the API omits it, so read it with `?.` (e.g. `meta.parameters?.a ?? []`).
    */
-  parameters: z.record(z.string(), z.array(z.string())),
+  parameters: z.record(z.string(), z.array(z.string())).optional(),
 
   /**
    * Default values of the parameters that have one, keyed by parameter name (e.g.
