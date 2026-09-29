@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0 (unreleased)
+
+### Breaking changes
+
+- Removed the deprecated exports `MetricTierSchema`, `MetricTier`, `MetricDataTypeSchema`,
+  `MetricDataType` and `FetchFn` (#23). None of them was used by the client; they were deprecated
+  with a promise of removal in 1.0. Migration:
+  - `MetricTier` / `MetricTierSchema`: use `MetricMetadata['tier']`, a `number` (e.g. `2`). The
+    string enum (`'free' | 'tier1' | …`) never matched the API's `tier` field.
+  - `MetricDataType` / `MetricDataTypeSchema`: define your own enum if you need these values
+    (`'average' | 'sum' | 'count' | 'percentage' | 'ratio'`); no response was ever validated
+    against them.
+  - `FetchFn`: use `GlassnodeFetch`, the type of the `fetch` config option, or `typeof fetch`
+    (which `FetchFn` was an alias of; a standard `fetch` still fits the option).
+
 ## 0.29.4
 
 - CI: `ci.yml` now also runs on pull requests into `release/**` branches (e.g. `release/1.0`), not

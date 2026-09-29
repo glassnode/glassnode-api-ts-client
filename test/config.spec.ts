@@ -3,7 +3,6 @@ import {
   GlassnodeConfigSchema,
   DEFAULT_API_URL,
   X402_API_URL,
-  type FetchFn,
   type GlassnodeConfig,
   type GlassnodeFetch,
   type Logger,
@@ -84,9 +83,8 @@ describe('logger and fetch options', () => {
     expectTypeOf<GlassnodeFetch>().toEqualTypeOf<
       (input: string, init?: RequestInit) => Promise<Response>
     >();
-    // The deprecated `FetchFn` keeps its meaning (`typeof fetch`) and still fits the option.
-    expectTypeOf<FetchFn>().toEqualTypeOf<typeof fetch>();
-    expectTypeOf<FetchFn>().toExtend<GlassnodeFetch>();
+    // The standard `fetch` type still fits the option.
+    expectTypeOf<typeof fetch>().toExtend<GlassnodeFetch>();
   });
 
   it('contextually types inline logger and fetch callbacks', () => {

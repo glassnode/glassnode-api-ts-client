@@ -8,16 +8,6 @@ import type { GlassnodeHooks } from './hooks.js';
 export type Logger = (message: string, ...args: unknown[]) => void;
 
 /**
- * The standard `fetch` type (`typeof fetch`).
- *
- * @deprecated The `fetch` config option is typed as {@link GlassnodeFetch}, the call the client
- * actually makes, which also accepts string-only custom fetches. `FetchFn` still means
- * `typeof fetch` (and a `FetchFn` value is still accepted as the option); use `GlassnodeFetch` to
- * type a custom fetch for the client.
- */
-export type FetchFn = typeof fetch;
-
-/**
  * Type of the `fetch` config option: the call the client makes. It is only ever called with a
  * string URL, as `fetch(url)` or `fetch(url, init)`, and must resolve to a standard `Response`.
  * When `init` carries the `X-Api-Key` header it also sets `redirect: 'manual'`; a custom fetch
