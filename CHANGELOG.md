@@ -99,6 +99,28 @@
   deprecated `moduleResolution: node` (`node10`), so `build:browser` no longer warns TS5107 and
   keeps working on TypeScript 7 (#35). The browser bundles are byte-identical before and after.
 
+### Tooling
+
+No change to the published package (#50).
+
+- Dev dependencies, within their current majors and the `.npmrc` 7-day `minimum-release-age`:
+  `vitest` and `@vitest/coverage-v8` 5.0.1, `eslint` 10.11.0, `prettier` 3.9.8, `rollup` 4.63.4,
+  `typescript-eslint` 8.70.1, the `@x402/evm` / `@x402/fetch` dev copies 2.27.0 and `viem` 2.56.8.
+  TypeScript stays 6.0.3 (#39). `examples/`: `@x402/*` 2.27.0, `viem` 2.56.8 and `dotenv` 16.6.1
+  (still 16.x; the 17/18 majors are not taken), locked with `npm install --before=<7 days ago>`.
+  `pnpm audit` and `npm audit` (in `examples/`) report no vulnerabilities.
+- CI: every GitHub Action is pinned by full commit SHA with a `# vX.Y.Z` comment, and moved to its
+  latest major: `actions/checkout` v7.0.1, `actions/setup-node` v7.0.0, `pnpm/action-setup` v6.1.0,
+  `actions/deploy-pages` v5.0.1 (`configure-pages` v6.0.0 and `upload-pages-artifact` v5.0.0 were
+  already current). No input changes were needed: the workflows already set `cache: 'pnpm'`
+  explicitly (setup-node v5+ only auto-caches npm projects), `pnpm/action-setup` keeps
+  `standalone: true` with the `npm_config_ignore_scripts: 'false'` bootstrap override, and
+  `publish.yml` keeps overwriting setup-node's `.npmrc` (v7 writes
+  `_authToken=${NODE_AUTH_TOKEN}` + `registry=`) before the OIDC publish.
+- CI hardening: `publish.yml`'s `publish` job no longer restores the pnpm cache (`cache: 'pnpm'`
+  dropped). It holds `id-token: write` and `contents: write`, and setup-node's docs advise against
+  caching in privileged release jobs (cache poisoning). The other jobs keep their cache.
+
 ## 0.30.1
 
 - Fix: `callBulkMetric()` now rejects a `metricPath` ending in `/bulk` (e.g. the metadata's

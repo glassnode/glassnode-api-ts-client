@@ -221,6 +221,12 @@ Settings → Pages → Source: **GitHub Actions**.
 Its concurrency group cancels superseded runs only for pull requests; a run called by
 `publish.yml` gets its own group and is never cancelled.
 
+Every action in the workflows is pinned by full commit SHA with a `# vX.Y.Z` comment (supply-chain
+hardening), never by a movable tag. To bump one, resolve the tag with
+`gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (for an annotated tag, dereference it with
+`gh api repos/<owner>/<repo>/git/tags/<sha>` to get the commit), update SHA and comment together,
+and read the release notes for changed inputs or defaults.
+
 ### Release branches
 
 A major release is prepared on a long-lived `release/**` branch (e.g. `release/1.0`, cut from

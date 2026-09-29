@@ -31,8 +31,8 @@ jobs:
       action: ${{ steps.state.outputs.action }}
       version: ${{ steps.state.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
       # Fails the job (rather than publishing) if npm cannot be queried; only a 404 means
@@ -57,31 +57,33 @@ jobs:
       contents: write # push the v<version> tag and create the GitHub Release
       id-token: write # npm Trusted Publishing (OIDC) and provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           standalone: true
         env:
-          # The repo .npmrc sets ignore-scripts=true (supply-chain hardening), but the
-          # standalone pnpm (@pnpm/exe) needs its preinstall (setup.js picks the platform
-          # binary) or the pnpm bin is a stub that fails with "This: not found". Re-enable
-          # scripts for this bootstrap only; the project installs below still honor .npmrc.
+          # The standalone pnpm (@pnpm/exe) needs its preinstall (setup.js picks the platform
+          # binary) or the pnpm bin is a stub that fails with "This: not found". The action
+          # installs it with `npm ci` in its own directory and lockfile, where the repo .npmrc
+          # (ignore-scripts=true) is probably not read; this step-level override makes sure
+          # scripts run for that bootstrap whatever npm config applies. It is scoped to this
+          # step: the project installs below still honor the repo .npmrc.
           npm_config_ignore_scripts: 'false'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          # registry-url is required so npm knows the registry for the OIDC exchange.
-          # npm CLI (>= 11.5.1) detects the OIDC environment and authenticates with it
-          # BEFORE falling back to the setup-node placeholder token, so no NODE_AUTH_TOKEN
-          # is set on the publish step. (pnpm publish does NOT do this — it uses the
-          # placeholder and 404s — which is why we publish with npm below.)
+          # registry-url is required so npm knows the registry for the OIDC exchange. No cache
+          # here: this job holds id-token: write and contents: write, and setup-node's docs advise
+          # against restoring a cache in privileged release jobs (cache poisoning).
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
-      # setup-node's registry-url writes an .npmrc with `always-auth=true` and a placeholder
-      # `_authToken`, which forces npm to send the fake token instead of doing the OIDC
-      # exchange (→ E404). Overwrite it with just the registry so npm has no token and must
-      # authenticate via OIDC trusted publishing.
-      - name: Clean npmrc so npm uses OIDC (not the placeholder token)
+      # With registry-url, setup-node v7 writes a user .npmrc (NPM_CONFIG_USERCONFIG) containing
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and `registry=…`, and no longer
+      # exports a placeholder NODE_AUTH_TOKEN (v4–v6 did). We set no NODE_AUTH_TOKEN: npm must
+      # authenticate via OIDC trusted publishing, not a configured token. The `_authToken` line
+      # still names a token (an unset variable) for the registry, which can pre-empt or break the
+      # OIDC path, so overwrite the file with just the registry. We publish with npm (>= 11.5.1
+      # does the OIDC exchange), not pnpm publish, which does not and 404s.
+      - name: Clean npmrc so npm uses OIDC (no configured token)
         run: printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
       # npm >= 11.5.1 performs the OIDC exchange.
       - run: npm install -g npm@latest
