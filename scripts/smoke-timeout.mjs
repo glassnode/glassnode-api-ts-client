@@ -19,7 +19,14 @@ function hangingFetch(_url, init) {
   });
 }
 
-const api = new GlassnodeAPI({ apiKey: 'smoke-key', fetch: hangingFetch, timeout: 20 });
+// A single attempt (`maxRetries: 0`, the default is 2): the smoke checks how one timeout abort
+// surfaces, and retry backoff (up to 1 s + 2 s) would only slow it down against the watchdog.
+const api = new GlassnodeAPI({
+  apiKey: 'smoke-key',
+  fetch: hangingFetch,
+  timeout: 20,
+  maxRetries: 0,
+});
 
 // AbortSignal.timeout()'s timer does not keep Node alive (a real fetch's socket would), so hold
 // the event loop open with a watchdog that also fails the smoke if the abort never happens.

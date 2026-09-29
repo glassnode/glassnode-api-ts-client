@@ -83,7 +83,9 @@ describe('client failure paths', () => {
 
   it('network failure -> GlassnodeNetworkError with timedOut=false and cause', async () => {
     const cause = new TypeError('Failed to fetch');
-    const err = await caught(api(vi.fn().mockRejectedValue(cause)).getMetricList());
+    const err = await caught(
+      api(vi.fn().mockRejectedValue(cause), { maxRetries: 0 }).getMetricList()
+    );
     expect(err).toBeInstanceOf(GlassnodeNetworkError);
     expect(err).toBeInstanceOf(GlassnodeError);
     const e = err as GlassnodeNetworkError;
@@ -95,7 +97,7 @@ describe('client failure paths', () => {
   it('timeout -> GlassnodeNetworkError with timedOut=true', async () => {
     const cause = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
     const err = await caught(
-      api(vi.fn().mockRejectedValue(cause), { timeout: 10 }).getMetricList()
+      api(vi.fn().mockRejectedValue(cause), { timeout: 10, maxRetries: 0 }).getMetricList()
     );
     expect(err).toBeInstanceOf(GlassnodeNetworkError);
     expect((err as GlassnodeNetworkError).timedOut).toBe(true);
@@ -110,14 +112,16 @@ describe('client failure paths', () => {
           init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
         })
     );
-    const err = await caught(api(fetchFn, { timeout: 5 }).getMetricList());
+    const err = await caught(api(fetchFn, { timeout: 5, maxRetries: 0 }).getMetricList());
     expect(err).toBeInstanceOf(GlassnodeNetworkError);
     expect((err as GlassnodeNetworkError).timedOut).toBe(true);
   });
 
   it('a non-timeout abort is not reported as timedOut', async () => {
     const cause = new DOMException('The operation was aborted', 'AbortError');
-    const err = await caught(api(vi.fn().mockRejectedValue(cause)).getMetricList());
+    const err = await caught(
+      api(vi.fn().mockRejectedValue(cause), { maxRetries: 0 }).getMetricList()
+    );
     expect(err).toBeInstanceOf(GlassnodeNetworkError);
     expect((err as GlassnodeNetworkError).timedOut).toBe(false);
   });
@@ -250,7 +254,7 @@ describe('transport rejection classification', () => {
   it('a non-Error object named TimeoutError -> timedOut=true, message and cause kept', async () => {
     const cause = { name: 'TimeoutError', message: 'The operation timed out' };
     const err = await caught(
-      api(vi.fn().mockRejectedValue(cause), { timeout: 10 }).getMetricList()
+      api(vi.fn().mockRejectedValue(cause), { timeout: 10, maxRetries: 0 }).getMetricList()
     );
     expect(err).toBeInstanceOf(GlassnodeNetworkError);
     const e = err as GlassnodeNetworkError;
@@ -261,7 +265,7 @@ describe('transport rejection classification', () => {
 
   it('a non-Error TimeoutError without a message falls back to its name', async () => {
     const err = await caught(
-      api(vi.fn().mockRejectedValue({ name: 'TimeoutError' })).getMetricList()
+      api(vi.fn().mockRejectedValue({ name: 'TimeoutError' }), { maxRetries: 0 }).getMetricList()
     );
     expect((err as GlassnodeNetworkError).timedOut).toBe(true);
     expect((err as GlassnodeNetworkError).message).toBe('Glassnode API error: TimeoutError');
@@ -342,7 +346,9 @@ describe('transport rejection classification', () => {
   it('never puts the API key in the error message', async () => {
     const leaky = `request to https://api.glassnode.com/v1/x?api_key=${API_KEY}&a=BTC failed`;
     for (const cause of [new TypeError(leaky), { name: 'TimeoutError', message: leaky }]) {
-      const err = await caught(api(vi.fn().mockRejectedValue(cause)).getMetricList());
+      const err = await caught(
+        api(vi.fn().mockRejectedValue(cause), { maxRetries: 0 }).getMetricList()
+      );
       expect((err as Error).message).not.toContain(API_KEY);
       expect((err as Error).message).toContain('api_key=***');
     }

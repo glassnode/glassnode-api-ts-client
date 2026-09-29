@@ -78,8 +78,15 @@ describe('redactSecrets', () => {
 describe('GlassnodeApiError never carries the API key', () => {
   for (const apiKeyLocation of LOCATIONS) {
     describe(`apiKeyLocation: ${apiKeyLocation}`, () => {
+      // One attempt: these tests are about the error a single failure produces (the retried
+      // case has its own test below).
       const api = (fetchFn: unknown) =>
-        new GlassnodeAPI({ apiKey: KEY, apiKeyLocation, fetch: fetchFn as typeof fetch });
+        new GlassnodeAPI({
+          apiKey: KEY,
+          apiKeyLocation,
+          fetch: fetchFn as typeof fetch,
+          maxRetries: 0,
+        });
 
       it('masks a server JSON message echoing the request URL and the raw key', async () => {
         const url = `https://api.glassnode.com/v1/metadata/metrics?api_key=${encodeURIComponent(KEY)}`;

@@ -65,6 +65,34 @@
     uses `?.`) and still cannot (the ESM build targets ES2022). It needs `node_modules`
     transpiled either way.
 
+- **`maxRetries` now defaults to `2`** (was `0`) (#49). A `429`, a `5xx` or a transport failure
+  (network error, per-attempt `timeout`) is retried up to twice (up to 3 attempts), with the
+  existing backoff: exponential from `retryDelay` (1 s), capped at `maxRetryDelay` (30 s), full
+  jitter, a `Retry-After` honoured. Every client call is a `GET`, so a retry repeats no side
+  effect. The `GlassnodeAPI` constructor applies the default (it depends on `x402`), exported as
+  `DEFAULT_MAX_RETRIES` (`2`) and `DEFAULT_X402_MAX_RETRIES` (`0`). `GlassnodeConfigSchema`
+  stays an object schema but no longer fills in `maxRetries`: `parse()` leaves an unset value
+  `undefined` (it was `0`), and its output type is now `number | undefined`. Resolve it with
+  `?? DEFAULT_MAX_RETRIES` (or `DEFAULT_X402_MAX_RETRIES` with `x402`).
+  `onRequest`/`onResponse` hook events report `maxAttempts: 3` by default.
+  - **Behaviour change:** a call that used to fail at once on a transient error may now succeed,
+    or fail only after up to two waits; the error is the last attempt's. `onRetry` hooks and the
+    `logger` now fire on those retries.
+  - **Worst-case latency:** `timeout` is per attempt, so with `timeout` set a failing call can now
+    take about 3 × `timeout` plus the backoff. The backoff is at most about 3 s with the defaults
+    (jittered, up to 1 s then 2 s). A `Retry-After` wait replaces it, capped at `maxRetryDelay`
+    (30 s by default, so up to about 60 s over two retries). For a deadline on the whole call,
+    retries included, pass `signal: AbortSignal.timeout(ms)` (see README
+    "[Cancellation and per-call timeouts](README.md#cancellation-and-per-call-timeouts)"), or
+    lower `maxRetries` / `maxRetryDelay`.
+  - **x402 mode keeps `0`:** with `x402: true` the default stays `0`. The fetch from
+    `createX402Fetch` never lets a failure after a signed payment be retried (it raises
+    `GlassnodePaymentError`), but the client cannot tell whether a caller-supplied payment fetch
+    does the same, and a retry of a paid `5xx` or timeout through a bare x402 wrapper would sign a
+    new payment and could pay twice. With `createX402Fetch` you can opt in (`maxRetries: 2`): only
+    unpaid attempts are ever retried.
+  - **Opt out:** pass `maxRetries: 0` for the previous single-attempt behaviour.
+
 ### Build
 
 - `tsconfig.browser.json` uses `module: ESNext` and `moduleResolution: bundler` instead of the

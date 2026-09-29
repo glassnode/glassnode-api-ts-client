@@ -24,6 +24,21 @@ export const X402_API_URL = 'https://x402.glassnode.com';
 // A testnet/staging x402 endpoint is not hardcoded here — pass its URL via the `apiUrl` config option.
 
 /**
+ * Default `maxRetries` when `x402` is off: up to 3 attempts for a `429`/`5xx` or a transport
+ * failure. Applied by the `GlassnodeAPI` constructor when `maxRetries` is not set;
+ * {@link GlassnodeConfigSchema} leaves an unset `maxRetries` as `undefined`.
+ */
+export const DEFAULT_MAX_RETRIES = 2;
+
+/**
+ * Default `maxRetries` when `x402` is on: no retries. The client cannot tell whether a
+ * caller-supplied payment fetch refuses to retry after a signed payment was sent, so it never
+ * retries a paid call unless the caller opts in with an explicit `maxRetries` (safe with the
+ * fetch from `createX402Fetch`, which only lets unpaid attempts be retried).
+ */
+export const DEFAULT_X402_MAX_RETRIES = 0;
+
+/**
  * Largest timer delay (ms) every runtime supports: 2^31 - 1 (~24.8 days). Larger delays overflow
  * `setTimeout` (Node fires them after 1 ms) and make `AbortSignal.timeout()` throw a RangeError.
  */
@@ -106,9 +121,18 @@ export const GlassnodeConfigSchema = z
 
     /**
      * Maximum number of retries for retryable failures: a `429`/`5xx` response, or a transport
-     * failure (`GlassnodeNetworkError`, including a per-attempt `timeout`). Default 0 (no retries).
+     * failure (`GlassnodeNetworkError`, including a per-attempt `timeout`). Default 2
+     * ({@link DEFAULT_MAX_RETRIES}, up to 3 attempts); `0` disables retries. The schema leaves an
+     * unset value `undefined`; the `GlassnodeAPI` constructor applies the default, which depends
+     * on `x402`.
+     *
+     * In `x402` mode the default is 0 ({@link DEFAULT_X402_MAX_RETRIES}): the client cannot tell
+     * whether the `fetch` it was given refuses to retry after a signed payment was sent. The fetch from `createX402Fetch` does
+     * (such a failure becomes a never-retried `GlassnodePaymentError`), so with it an explicit
+     * `maxRetries` only ever retries unpaid requests; with a bare x402 wrapper, a retry after a
+     * paid `5xx` or a timeout would sign a new payment and could pay twice.
      */
-    maxRetries: z.number().int().nonnegative().default(0),
+    maxRetries: z.number().int().nonnegative().optional(),
 
     /** Base delay in milliseconds between retries (doubles each attempt, then full jitter). */
     retryDelay: timerMs().default(1000),

@@ -103,7 +103,8 @@ describe('observability hooks: event sequence and payloads', () => {
       endpoint: ENDPOINT,
       url: 'https://api.glassnode.com/v1/metadata/metrics?api_key=***',
       attempt: 1,
-      maxAttempts: 1,
+      // The default maxRetries (2): up to 3 attempts, even though the first one succeeds.
+      maxAttempts: 3,
     });
     expect(res).toEqual({
       ...req,
