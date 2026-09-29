@@ -37,6 +37,34 @@ describe('GlassnodeConfigSchema', () => {
     expect(parsed.apiUrl).toBeUndefined();
   });
 
+  describe('maxRetries default', () => {
+    const fetchFn = (async () => new Response()) as unknown as typeof fetch;
+
+    it('defaults maxRetries to 2', () => {
+      expect(GlassnodeConfigSchema.parse({ apiKey: 'k' }).maxRetries).toBe(2);
+    });
+
+    it('defaults maxRetries to 0 in x402 mode (a retry could pay twice with a fetch that is not from createX402Fetch)', () => {
+      expect(GlassnodeConfigSchema.parse({ x402: true, fetch: fetchFn }).maxRetries).toBe(0);
+    });
+
+    it('keeps an explicit maxRetries in either mode, including 0', () => {
+      expect(GlassnodeConfigSchema.parse({ apiKey: 'k', maxRetries: 0 }).maxRetries).toBe(0);
+      expect(GlassnodeConfigSchema.parse({ apiKey: 'k', maxRetries: 5 }).maxRetries).toBe(5);
+      expect(
+        GlassnodeConfigSchema.parse({ x402: true, fetch: fetchFn, maxRetries: 3 }).maxRetries
+      ).toBe(3);
+    });
+
+    it('still rejects a negative or non-integer maxRetries', () => {
+      for (const maxRetries of [-1, 1.5]) {
+        const result = GlassnodeConfigSchema.safeParse({ apiKey: 'k', maxRetries });
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toEqual(['maxRetries']);
+      }
+    });
+  });
+
   describe('timer bounds (timeout, retryDelay, maxRetryDelay)', () => {
     // Timers only take a 32-bit signed delay; larger values overflow (Node fires them after 1 ms)
     // and `AbortSignal.timeout()` throws a RangeError above 2^32 - 1.

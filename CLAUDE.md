@@ -117,7 +117,10 @@ constructor; an invalid config throws `GlassnodeConfigError`):
 - `fetch` (optional) - Custom fetch function for testing or custom HTTP behavior (default
   `globalThis.fetch`)
 - `maxRetries` (optional) - Number of retries for 429/5xx responses and transport failures (network
-  errors, per-attempt timeouts); non-negative integer, default 0
+  errors, per-attempt timeouts); non-negative integer, default 2 (`0` disables retries). With
+  `x402` the default is 0: the client cannot tell whether a custom payment fetch refuses to retry
+  after a signed payment was sent (the `createX402Fetch` fetch does, raising a never-retried
+  `GlassnodePaymentError`), so a retry could pay twice. An explicit value always wins
 - `retryDelay` (optional) - Base delay in ms between retries (default 1000, doubles each attempt,
   capped at `maxRetryDelay`, then full jitter; a `Retry-After` on a retried response is used
   instead, capped but not jittered)

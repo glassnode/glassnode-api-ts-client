@@ -119,7 +119,7 @@ const data = await api.callMetric('/market/price_usd_close', {
 | `logger`         | `(message: string, ...args: unknown[]) => void` | —                           | Callback for debug logging (e.g. `console.log`); its failures are ignored                                     |
 | `hooks`          | `GlassnodeHooks`                                | —                           | Structured `onRequest` / `onResponse` / `onRetry` / `onError` callbacks (see [Observability](#observability)) |
 | `fetch`          | `GlassnodeFetch`                                | `globalThis.fetch`          | Custom fetch implementation (or an x402-wrapped fetch); required with `x402`                                  |
-| `maxRetries`     | `number`                                        | `0`                         | Retries for retryable failures (`429`, `5xx`, network errors, timeouts); a non-negative integer               |
+| `maxRetries`     | `number`                                        | `2` (`0` with `x402`)       | Retries for retryable failures (`429`, `5xx`, network errors, timeouts); a non-negative integer; `0` disables |
 | `retryDelay`     | `number`                                        | `1000`                      | Base retry delay in ms (doubles each attempt, then full jitter)                                               |
 | `maxRetryDelay`  | `number`                                        | `30000`                     | Upper bound in ms for a single retry wait (also caps a `Retry-After`)                                         |
 | `timeout`        | `number`                                        | — (no timeout)              | Per-attempt timeout in ms; each attempt aborts via `AbortSignal.timeout()`                                    |
@@ -342,7 +342,7 @@ matching needed.
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GlassnodeError`           | Base class of all the errors below — catch this to handle any library failure                                                                                                                                                                       | `message`, `cause`                                                                                                                                                             |
 | `GlassnodeApiError`        | The API answered with a non-2xx HTTP status (e.g. `401`, `404`, `429`, `5xx`, or a `3xx` not followed; with x402, only before a payment was sent, or `402` after it)                                                                                | `status`, `statusText`, `detail` (server message), `isRetryable` (429 / 5xx)                                                                                                   |
-| `GlassnodeNetworkError`    | No HTTP response: connection/DNS failure (in a browser also a CORS block), or the per-attempt `timeout` firing. Retried when `maxRetries` > 0                                                                                                       | `timedOut` (`true` when `timeout` fired), `cause` (the original fetch error)                                                                                                   |
+| `GlassnodeNetworkError`    | No HTTP response: connection/DNS failure (in a browser also a CORS block), or the per-attempt `timeout` firing. Retried unless `maxRetries` is `0`                                                                                                  | `timedOut` (`true` when `timeout` fired), `cause` (the original fetch error)                                                                                                   |
 | `GlassnodeAbortError`      | The call was cancelled through the per-call `signal` (already aborted, or aborted mid-request or during a retry wait). Never retried                                                                                                                | `cause` (the signal's `reason`, e.g. a `DOMException` named `AbortError`, or `TimeoutError` for `AbortSignal.timeout()`)                                                       |
 | `GlassnodeValidationError` | A `2xx` response was unusable: the body was not valid JSON, or did not match the expected schema (or `callMetric`'s `schema`). Never retried                                                                                                        | `endpoint` (API path, e.g. `/v1/metadata/assets`), `cause` (`ZodError` / `SyntaxError`)                                                                                        |
 | `GlassnodeConfigError`     | The options passed to `new GlassnodeAPI(...)` are invalid (e.g. empty `apiKey`, `x402` without `fetch`, an unknown hook name), or `createX402Fetch` cannot load its optional peer dependencies                                                      | `message` (lists the invalid fields), `cause` (`ZodError` / import error)                                                                                                      |
@@ -404,14 +404,16 @@ try {
 
 ## Retries
 
-Retries are off by default (`maxRetries: 0`). Enable them for rate limits (`429`), server errors
-(`5xx`) and transport failures — connection/DNS errors and a per-attempt `timeout` firing
-(`GlassnodeNetworkError`):
+Retries are on by default: a call is retried up to **2** times (`maxRetries: 2`, so up to 3
+attempts) on rate limits (`429`), server errors (`5xx`) and transport failures — connection/DNS
+errors and a per-attempt `timeout` firing (`GlassnodeNetworkError`). Every client call is a `GET`,
+so a retry never repeats a side effect. Tune the count and delays, or pass `maxRetries: 0` to make
+a single attempt:
 
 ```typescript
 const api = new GlassnodeAPI({
   apiKey: 'YOUR_API_KEY',
-  maxRetries: 3, // retry up to 3 times
+  maxRetries: 3, // retry up to 3 times (default 2; 0 disables retries)
   retryDelay: 1000, // base delay; the cap grows 1s → 2s → 4s …
   maxRetryDelay: 30000, // cap a single wait at 30s (default)
 });
@@ -427,9 +429,12 @@ immediately with a `GlassnodeValidationError`.
 Non-retryable errors (e.g. `401`, `404`, a caller abort, invalid input) fail immediately without
 retrying. When every attempt fails, the call rejects with the last attempt's error.
 
-With [x402](#paid-calls-with-x402), a connection failure, timeout, `429` or `5xx` is retried only
-while no payment has been sent. Once a signed payment has gone out, a failure — whatever the HTTP
-status — is **never** retried; see
+With [x402](#paid-calls-with-x402) (`x402: true`), the default is `maxRetries: 0`: the client
+cannot tell whether the `fetch` it was given refuses to retry after a payment was sent, and a bare
+x402 wrapper would sign a **new** payment on each retry of a paid `5xx` or timeout. The fetch from
+`createX402Fetch` does refuse, so with it you can opt in (e.g. `maxRetries: 2`): a connection
+failure, timeout, `429` or `5xx` is then retried only while no payment has been sent. Once a signed
+payment has gone out, a failure — whatever the HTTP status — is **never** retried; see
 [Errors](#x402-errors) below.
 
 ## Cancellation and per-call timeouts
@@ -583,6 +588,9 @@ const api = new GlassnodeAPI({
     account,
     maxPaymentPerCall: '0.06', // USDC per-call ceiling (default)
   }),
+  // Optional: retries default to 0 with x402. Safe with createX402Fetch, which never retries once
+  // a payment was sent (only unpaid attempts are retried).
+  maxRetries: 2,
 });
 
 // Pays $0.05 USDC on Base, transparently:
