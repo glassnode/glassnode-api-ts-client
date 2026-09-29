@@ -219,29 +219,36 @@ export const MetricMetadataSchema = z.object({
     .optional(),
 
   /**
-   * Reference links for this metric
+   * Reference links for this metric (docs, Studio, variant paths). Optional: `undefined` when the
+   * API omits it, so read it with `?.` (e.g. `meta.refs?.docs`).
    */
-  refs: z.object({
-    docs: z.string().optional(),
-    studio: z.string().optional(),
-    metric_variant: z
-      .object({
-        base: z.string().optional(),
-        bulk: z.string().optional(),
-        pit: z.string().optional(),
-      })
-      .optional(),
-  }),
+  refs: z
+    .object({
+      docs: z.string().optional(),
+      studio: z.string().optional(),
+      metric_variant: z
+        .object({
+          base: z.string().optional(),
+          bulk: z.string().optional(),
+          pit: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 
   /**
-   * Queried parameters for the metric
+   * The request's parameters as the API echoes them back (e.g. `{ path: '/market/price_usd_close' }`,
+   * plus `a` when an asset was passed). Optional: `undefined` when the API omits it, so read it
+   * with `?.`.
    */
-  queried: z.record(z.string(), z.any()),
+  queried: z.record(z.string(), z.any()).optional(),
 
   /**
-   * List of all allowed parameters and their values for the metric
+   * All allowed parameters of the metric and their values, keyed by parameter name (e.g.
+   * `{ a: ['BTC', 'ETH', …], i: ['24h', …] }`). Optional, with no `{}` default: `undefined` when
+   * the API omits it, so read it with `?.` (e.g. `meta.parameters?.a ?? []`).
    */
-  parameters: z.record(z.string(), z.array(z.string())),
+  parameters: z.record(z.string(), z.array(z.string())).optional(),
 
   /**
    * Default values of the parameters that have one, keyed by parameter name (e.g.

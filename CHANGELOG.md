@@ -14,6 +14,17 @@
     against them.
   - `FetchFn`: use `GlassnodeFetch`, the type of the `fetch` config option, or `typeof fetch`
     (which `FetchFn` was an alias of; a standard `fetch` still fits the option).
+- `MetricMetadata` (from `getMetricMetadata()` / `MetricMetadataSchema`): `refs`, `queried` and
+  `parameters` are now optional, in line with the lenient response policy (0.12.0). A response
+  that omits any of them now parses instead of rejecting the whole call; only `path` and `tier`
+  stay required. An absent field is reported as sent, `undefined`, with no `{}` default. Their
+  types become `… | undefined`, which breaks code that reads them directly (e.g.
+  `meta.refs.docs` or `Object.keys(meta.parameters)`) under `strictNullChecks`. The recorded API
+  responses still carry all three, so runtime values do not change today.
+
+  **Migration:** read these fields with `?.` and a fallback where you need one, e.g.
+  `meta.refs?.docs`, `meta.queried?.a`, `meta.parameters?.a ?? []`,
+  `Object.entries(meta.parameters ?? {})`.
 
 ## 0.29.4
 

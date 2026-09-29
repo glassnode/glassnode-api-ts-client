@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, type Mock } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi, type Mock } from 'vitest';
 import { GlassnodeAPI } from '../src/glassnode-api';
 import { GlassnodeApiError } from '../src/errors';
+import { MetricMetadataSchema, type MetricMetadata } from '../src/types/metadata';
 import {
   API_KEY,
   DEFAULT_API_URL,
@@ -451,6 +452,38 @@ describe('GlassnodeAPI', () => {
 
         expect(result.parameters_defaults).toEqual(parametersDefaults);
       }
+    });
+
+    it('requires only path and tier: refs, queried and parameters are optional', () => {
+      const result = MetricMetadataSchema.safeParse({ path: '/x', tier: 1 });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ path: '/x', tier: 1 });
+      // The fields' types admit `undefined` (read them with `?.`).
+      expectTypeOf<undefined>().toExtend<MetricMetadata['refs']>();
+      expectTypeOf<undefined>().toExtend<MetricMetadata['queried']>();
+      expectTypeOf<MetricMetadata['parameters']>().toEqualTypeOf<
+        Record<string, string[]> | undefined
+      >();
+
+      const missing = MetricMetadataSchema.safeParse({});
+      expect(missing.success).toBe(false);
+      expect(missing.error!.issues.map((i) => i.path.join('.')).sort()).toEqual(['path', 'tier']);
+    });
+
+    it('leaves refs, queried and parameters undefined (not {}) when the API omits them', async () => {
+      const raw: Record<string, unknown> = { ...mockRawMetricMetadataResponse };
+      delete raw.refs;
+      delete raw.queried;
+      delete raw.parameters;
+      const fetchFn = createMockFetch({ ok: true, json: vi.fn().mockResolvedValue(raw) });
+
+      const result = await createApi(fetchFn).getMetricMetadata('/distribution/balance_exchanges');
+
+      expect(result.path).toBe('/distribution/balance_exchanges');
+      expect(result).not.toHaveProperty('refs');
+      expect(result).not.toHaveProperty('queried');
+      expect(result).not.toHaveProperty('parameters');
     });
 
     it('rejects parameters_defaults whose values are not string arrays', async () => {

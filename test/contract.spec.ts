@@ -164,15 +164,21 @@ async function metricMetadataCase(
   expect(typeof result.timerange!.min).toBe('number');
   expect(result.timerange!.min).toBeLessThan(result.timerange!.max);
   expect(result.bulk_supported).toBe(body.bulk_supported);
+  // `refs`, `queried` and `parameters` are optional in the schema, but the recorded responses
+  // all carry them. Checked before any dereference below, so a re-recorded response without them
+  // fails with a clear assertion: that is a change in the recorded API response, not a schema bug.
+  expect(result.refs).toBeDefined();
+  expect(result.queried).toBeDefined();
+  expect(result.parameters).toBeDefined();
   expect(result.parameters).toEqual(body.parameters);
   // Only sent for a metric with a defaulted parameter; `undefined` (not `{}`) otherwise.
   expect(result.parameters_defaults).toEqual(body.parameters_defaults);
   expect(result.queried).toEqual(body.queried);
-  expect(result.queried.path).toBe(metadataPath(entry));
+  expect(result.queried!.path).toBe(metadataPath(entry));
   expect(result.refs).toEqual(body.refs);
   expect(result.descriptors).toEqual(body.descriptors);
   expect(result.descriptors?.name).toEqual(expect.any(String));
-  expect(result.parameters.f).toContain('json');
+  expect(result.parameters!.f).toContain('json');
   return result;
 }
 
@@ -279,8 +285,8 @@ const CASES: Record<string, Case> = {
   'metric-metadata-price-usd-close': async (api, entry, raw) => {
     const result = await metricMetadataCase(api, entry, raw);
     expect(result.tier).toBe(1);
-    expect(result.parameters.a).toEqual(expect.arrayContaining(['BTC', 'ETH', 'SOL']));
-    expect(result.parameters.a.length).toBeGreaterThan(100);
+    expect(result.parameters!.a).toEqual(expect.arrayContaining(['BTC', 'ETH', 'SOL']));
+    expect(result.parameters!.a.length).toBeGreaterThan(100);
     expect(result.queried).toEqual({ path: '/market/price_usd_close' });
     expect(result.parameters_defaults).toBeUndefined();
     return result;
@@ -290,8 +296,8 @@ const CASES: Record<string, Case> = {
   'metric-metadata-balance-exchanges-btc': async (api, entry, raw) => {
     const result = await metricMetadataCase(api, entry, raw);
     expect(result.tier).toBe(2);
-    expect(result.parameters.a).toEqual(['BTC']);
-    expect(result.parameters.e).toEqual(expect.arrayContaining(['aggregated', 'binance']));
+    expect(result.parameters!.a).toEqual(['BTC']);
+    expect(result.parameters!.e).toEqual(expect.arrayContaining(['aggregated', 'binance']));
     expect(result.parameters_defaults).toEqual({ e: ['aggregated'] });
     expectTypeOf(result.parameters_defaults).toEqualTypeOf<Record<string, string[]> | undefined>();
     expect(result.queried).toEqual({ a: 'BTC', path: '/distribution/balance_exchanges' });
@@ -302,8 +308,8 @@ const CASES: Record<string, Case> = {
   'metric-metadata-us-spot-etf-balances-all': async (api, entry, raw) => {
     const result = await metricMetadataCase(api, entry, raw);
     expect(result.tier).toBe(1);
-    expect(result.parameters.a).toEqual(expect.arrayContaining(['BTC', 'ETH']));
-    expect(result.parameters.i).toEqual(['24h', '1w', '1month']);
+    expect(result.parameters!.a).toEqual(expect.arrayContaining(['BTC', 'ETH']));
+    expect(result.parameters!.i).toEqual(['24h', '1w', '1month']);
     expect(result.queried).toEqual({ path: '/institutions/us_spot_etf_balances_all' });
     return result;
   },
