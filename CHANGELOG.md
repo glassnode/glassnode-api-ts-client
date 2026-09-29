@@ -8,9 +8,11 @@ section defines. Breaking changes: deprecated exports removed, lenient `MetricMe
 `modified` as unix seconds, no `browser` field, `maxRetries` defaulting to `2` and Node.js >= 22;
 each has migration notes below.
 
-It also contains 0.29.4–0.30.1, which were never all on npm: 0.29.4, 0.29.5 and 0.30.0 were not
-published. If you are upgrading from 0.29.3, read those sections too (notably 0.30.0's
-`BulkEntry['v']` type change).
+It also contains 0.29.4–0.30.1. Of those, only 0.30.1 reached npm: 0.29.4, 0.29.5 and 0.30.0 were
+never published and have no GitHub Release. If you are upgrading from 0.29.3 or earlier, read their
+sections in the full
+[CHANGELOG](https://github.com/glassnode/glassnode-api-ts-client/blob/main/CHANGELOG.md) too
+(notably 0.30.0's `BulkEntry['v']` type change).
 
 ### Breaking changes
 
@@ -110,8 +112,8 @@ published. If you are upgrading from 0.29.3, read those sections too (notably 0.
   and runs on Node 22 (same steps: build, CJS `require` smoke, `scripts/smoke-timeout.mjs`). No
   code or output changes: the `tsconfig*.json` `target`/`lib` are unchanged (the Node builds'
   ES2022 already fits Node 22, and their ESM output also reaches browsers through bundlers; the
-  browser bundles stay ES2015), and the client keeps its own `AbortSignal.any()` stand-in for older
-  browsers.
+  browser bundles' own code stays ES2015, while their bundled Zod is ES2020), and the client keeps
+  its own `AbortSignal.any()` stand-in for older browsers.
 
   **Migration:** upgrade to Node.js 22 or later. On Node 18 or 20, stay on 0.x: package managers
   that enforce `engines` (e.g. with `engine-strict`) refuse to install 1.0, and it is not tested
@@ -119,8 +121,10 @@ published. If you are upgrading from 0.29.3, read those sections too (notably 0.
 
 ### Docs
 
-- README: a new "Stability and versioning" section states what semver covers from 1.0 (the public
-  API, what a minor or a major release may change, Zod 4, and what is not covered). The Features
+- README: a new "Stability and versioning" section states what semver covers from 1.0: the public
+  API, what a minor or a major release may change (including widened output types, rejected
+  inputs, Zod and optional peer majors), how new response fields are parsed, the TypeScript and
+  browser baselines, and what is not covered. The Features
   list no longer calls retries opt-in: they are on by default since the `maxRetries` change above.
 
 ### Build

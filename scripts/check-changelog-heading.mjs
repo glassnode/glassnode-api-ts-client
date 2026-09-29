@@ -3,9 +3,10 @@
 // so a heading with a suffix (e.g. still "(unreleased)") would release without notes.
 //
 // - Target `main` (and anything that is not `release/**`): exactly `## <package.json version>`.
-// - Target `release/**`: that, or `## <x.y.z> (unreleased)`. A release branch carries no version
-//   bump (package.json still has the last published version), so the unreleased heading is not
-//   compared with package.json. The final PR from the release branch to `main` must rename it.
+// - Target `release/**`: that, or `## <x.y.z> (unreleased)`. PRs into a release branch carry no
+//   version bump (package.json still has the last published version), so the unreleased heading is
+//   not compared with package.json. Only the last one, the release prep (into the release branch or
+//   the final PR to `main`), bumps the version and renames the heading to `## <version>`.
 //
 // Usage: node scripts/check-changelog-heading.mjs [target-branch]
 //   The target defaults to $TARGET_BRANCH, then `main`. Env CHANGELOG and PACKAGE_JSON override

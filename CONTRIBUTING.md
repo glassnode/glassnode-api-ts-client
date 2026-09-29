@@ -53,10 +53,13 @@ newer than Node 22 in `src/`.
 Every change bumps `version` in `package.json` and adds an entry at the top of `CHANGELOG.md`
 describing it. Follow [semver](https://semver.org/):
 
-- **Major**: breaking changes (removed or renamed exports, changed method signatures, a higher
-  minimum Node.js version).
+- **Major**: breaking changes (removed or renamed exports, changed method signatures, changed
+  defaults, tightened or widened response schemas, a higher minimum Node.js version).
 - **Minor**: new features, methods or config options that are backward compatible.
 - **Patch**: bug fixes, docs and internal refactors with no API change.
+
+The README's [Stability and versioning](./README.md#stability-and-versioning) section spells out
+what counts as breaking.
 
 The version in your PR is exactly the one that gets published: the release workflow does not bump
 it. A PR merged without a bump publishes nothing.

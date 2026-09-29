@@ -147,7 +147,8 @@ the largest timer delay). Every method also takes optional per-call options as i
 
 Follow [semver](https://semver.org/):
 
-- **Major** (1.0.0 → 2.0.0): Breaking changes (removed/renamed exports, changed method signatures)
+- **Major** (1.0.0 → 2.0.0): Breaking changes (removed/renamed exports, changed method signatures,
+  changed defaults, tightened or widened response schemas, a higher minimum Node.js version)
 - **Minor** (0.4.0 → 0.5.0): New features, new methods, new config options (backward-compatible)
 - **Patch** (0.5.0 → 0.5.1): Bug fixes, docs, internal refactors (no API changes)
 
@@ -228,8 +229,9 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
 The CHANGELOG heading check (`scripts/check-changelog-heading.mjs`, target = the PR's base branch,
 or `main` when `publish.yml` calls `ci.yml`): the top `## ` heading of `CHANGELOG.md` must be
 exactly `## <package.json version>`; into `release/**`, `## <x.y.z> (unreleased)` is also accepted
-(not compared with package.json, which a release branch does not bump). So a heading still marked
-"(unreleased)" fails the final release-branch PR into `main` until it is renamed.
+(not compared with package.json, which PRs into a release branch do not bump, except the release
+prep PR; see [Release branches](#release-branches)). So a heading still marked "(unreleased)"
+fails the final release-branch PR into `main` until it is renamed.
 
 `.github/workflows/docs.yml` builds the API reference on every push to `main` and deploys it to
 GitHub Pages (https://glassnode.github.io/glassnode-api-ts-client/). It requires the repo setting
