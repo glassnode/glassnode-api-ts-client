@@ -147,43 +147,6 @@ export const AssetMetadataResponseSchema = z.array(AssetMetadataSchema);
 export type AssetMetadataResponse = z.infer<typeof AssetMetadataResponseSchema>;
 
 /**
- * Metric tier schema
- *
- * @deprecated Not used by any schema or client method, and it does not match the API:
- * the `tier` field on metric metadata is a number (e.g. `2`), not one of these strings.
- * Use `MetricMetadata['tier']` (a `number`) to type it instead. This export will be
- * removed in the next major release (1.0).
- */
-export const MetricTierSchema = z.enum(['free', 'tier1', 'tier2', 'tier3', 'tier4', 'tier5']);
-
-/**
- * Metric tier type
- *
- * @deprecated Does not match the API: the `tier` field on metric metadata is a number
- * (e.g. `2`), not one of these strings. Use `MetricMetadata['tier']` (a `number`) instead.
- * This export will be removed in the next major release (1.0).
- */
-export type MetricTier = z.infer<typeof MetricTierSchema>;
-
-/**
- * Metric data type schema
- *
- * @deprecated Not used by any schema or client method and not validated against any
- * API response. If you need these values, define your own enum. This export will be
- * removed in the next major release (1.0).
- */
-export const MetricDataTypeSchema = z.enum(['average', 'sum', 'count', 'percentage', 'ratio']);
-
-/**
- * Metric data type
- *
- * @deprecated Not used by any schema or client method and not validated against any
- * API response. If you need these values, define your own type. This export will be
- * removed in the next major release (1.0).
- */
-export type MetricDataType = z.infer<typeof MetricDataTypeSchema>;
-
-/**
  * Metric descriptors schema (human-readable names, tags, descriptions)
  */
 export const MetricDescriptorsSchema = z.object({
@@ -211,8 +174,7 @@ export const MetricMetadataSchema = z.object({
 
   /**
    * Access tier required for this metric, as a non-negative integer (e.g. `2`).
-   * Type it as `MetricMetadata['tier']`; the deprecated string-based `MetricTier`
-   * does not describe this field.
+   * Type it as `MetricMetadata['tier']`.
    */
   tier: z.number().int().nonnegative(),
 
