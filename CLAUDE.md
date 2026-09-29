@@ -166,10 +166,13 @@ merged without a bump publishes nothing (see [Publishing](#publishing)).
   `node`/`node10`, which TypeScript 7 drops); `@rollup/plugin-node-resolve` does the actual
   resolution, so the setting only affects type-checking.
 - **CDN entry**: the `unpkg` and `jsdelivr` fields point at the UMD bundle, so the bare package URL
-  on those CDNs serves it. There is deliberately **no** top-level `browser` field and **no**
-  `browser` condition in `exports`: either would steer bundlers (webpack, Vite, esbuild with
-  `platform: 'browser'`) to the pre-minified bundle with `zod` inlined instead of the tree-shakeable
-  ESM build. Keep it that way even though `publint` used to suggest the `browser` condition (#37).
+  on those CDNs serves it (unpkg never read `browser`: it served the CJS `main` before 1.0). There
+  is deliberately **no** top-level `browser` field and **no** `browser` condition in `exports`. A
+  `browser` condition inside `exports` would steer webpack 5, Vite and esbuild
+  (`platform: 'browser'`) to the pre-minified bundle with `zod` inlined instead of the
+  tree-shakeable ESM build. The top-level field is ignored by them whenever `exports` exists; it
+  only affected `exports`-unaware tools such as Browserify. Keep both out, even though `publint`
+  suggested the condition (#37).
 - Config: `tsconfig.json` (CJS), `tsconfig.esm.json` (ESM), `tsconfig.browser.json` (browser),
   `tsconfig.test.json` (tests/IDE), `tsconfig.examples.json` (type-checks `examples/` against
   `src/` using root deps), `examples/tsconfig.json` (ts-node config for running the examples;

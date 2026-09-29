@@ -45,16 +45,25 @@
 
 - `package.json` no longer has a top-level `browser` field; `unpkg` and `jsdelivr` fields point at
   `dist/glassnode-api.umd.min.js` instead (#37). `exports` gets no `browser` condition, so
-  bundlers keep resolving the tree-shakeable ESM build (`import`) or CommonJS (`require`) exactly
-  as before. Both bundles still ship at the same paths, and the bare unpkg/jsDelivr URL still
-  serves the UMD bundle.
-  - **Who is affected:** only tools that read `browser` and ignore `exports` (e.g. webpack 4,
-    Browserify, or a bundler with `exports` resolution turned off). They now fall back to `module`
-    (`dist/esm/index.js`) or `main` (`dist/index.js`), which import `zod` as a dependency instead
-    of the pre-minified bundle with `zod` inlined. The API is the same.
-  - **Migration:** nothing for most users. To keep loading the UMD bundle, reference it by path:
-    `glassnode-api/dist/glassnode-api.umd.min.js` in a `<script>` tag or a bundler alias (only
-    `exports`-unaware tools can import that deep path; `exports` does not list it).
+  `exports`-aware tools (Node, webpack 5, Vite, esbuild, Rollup, TypeScript) resolve exactly as
+  before: the tree-shakeable ESM build (`import`) or CommonJS (`require`). Both bundles still ship
+  at the same paths.
+  - **CDNs:** the bare `https://unpkg.com/glassnode-api` URL now serves the UMD bundle. unpkg
+    ignores `browser`, so it used to serve the CommonJS `main` (`dist/index.js`), which fails in a
+    `<script>` tag. jsDelivr already served the UMD bundle through `browser` and still does,
+    through `jsdelivr`. Explicit `dist/…min.js` URLs are unchanged.
+  - **Who is affected:** tools that read `browser` and ignore `exports`, chiefly **Browserify**
+    (or a bundler with `exports` resolution turned off). Browserify now bundles `dist/index.js` plus
+    zod's CommonJS build instead of the UMD bundle. It still works, with the same API, but the
+    output is about 6× larger: about 186 KB gzipped instead of 31 KB.
+  - **Migration:** to keep the smaller bundle in Browserify, require the UMD file by path,
+    `require('glassnode-api/dist/glassnode-api.umd.min.js')`, or map `glassnode-api` to it (e.g.
+    with a `browser` field in your own `package.json`). Browserify ignores `exports`, so the deep
+    path resolves; `exports`-aware tools cannot import it, and do not need to. In a page, load it
+    with a `<script>` tag from a CDN or your own copy.
+  - webpack 4 is not affected: it could not parse the package before this change (the UMD bundle
+    uses `?.`) and still cannot (the ESM build targets ES2022). It needs `node_modules`
+    transpiled either way.
 
 ### Build
 
