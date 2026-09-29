@@ -81,6 +81,12 @@ plan=$(NPM_VIEW="$pkg_view" NPM_RC="$pkg_rc" VERSION="$version" node "$(dirname 
 dist_tag=$(sed -n 's/^dist_tag=//p' <<<"$plan")
 latest=$(sed -n 's/^latest=//p' <<<"$plan")
 skipped=$(sed -n 's/^skipped=//p' <<<"$plan")
+# Belt and braces: never hand `npm publish --tag` an empty or unexpected tag (an empty one would
+# fail the publish, a wrong one could move `latest`).
+if ! [[ "$dist_tag" =~ ^(latest|next|backport-[0-9]+\.[0-9]+)$ ]]; then
+  echo "::error::Unexpected dist-tag '$dist_tag' for $name@$version from release-plan.mjs" >&2
+  exit 1
+fi
 
 case "$state" in
   missing)

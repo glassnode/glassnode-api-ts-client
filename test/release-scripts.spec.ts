@@ -165,8 +165,19 @@ describe('release-state.sh (fake npm)', () => {
     0,
   ];
 
-  function run(version: string, npm: Npm, changelog = CHANGELOG) {
+  /**
+   * Runs release-state.sh in a temp repo with a fake `npm`. `plan` replaces release-plan.mjs (the
+   * script is copied next to a fake one, since it runs `$(dirname "$0")/release-plan.mjs`).
+   */
+  function run(version: string, npm: Npm, changelog = CHANGELOG, plan?: string) {
     const dir = tempDir();
+    let script = join(scripts, 'release-state.sh');
+    if (plan !== undefined) {
+      mkdirSync(join(dir, 'scripts'));
+      script = join(dir, 'scripts', 'release-state.sh');
+      writeFileSync(script, readFileSync(join(scripts, 'release-state.sh')));
+      writeFileSync(join(dir, 'scripts', 'release-plan.mjs'), plan);
+    }
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'glassnode-api', version }));
     writeFileSync(join(dir, 'CHANGELOG.md'), changelog);
     const fakeNpm = join(dir, 'bin', 'npm');
@@ -176,6 +187,7 @@ describe('release-state.sh (fake npm)', () => {
       fakeNpm,
       [
         '#!/bin/sh',
+        'echo "$*" >> "$FAKE_NPM_LOG"',
         'case "$2" in',
         '  *@*) printf "%s" "$FAKE_VERSION_OUT"; exit "$FAKE_VERSION_RC" ;;',
         '  *) printf "%s" "$FAKE_PKG_OUT"; exit "$FAKE_PKG_RC" ;;',
@@ -186,9 +198,11 @@ describe('release-state.sh (fake npm)', () => {
     chmodSync(fakeNpm, 0o755);
     const output = join(dir, 'output');
     const summary = join(dir, 'summary');
+    const npmLog = join(dir, 'npm.log');
+    writeFileSync(npmLog, '');
     writeFileSync(output, '');
     writeFileSync(summary, '');
-    const res = spawnSync('bash', [join(scripts, 'release-state.sh')], {
+    const res = spawnSync('bash', [script], {
       cwd: dir,
       encoding: 'utf8',
       env: {
@@ -201,6 +215,7 @@ describe('release-state.sh (fake npm)', () => {
         FAKE_VERSION_RC: String(npm.version[1]),
         FAKE_PKG_OUT: npm.pkg[0],
         FAKE_PKG_RC: String(npm.pkg[1]),
+        FAKE_NPM_LOG: npmLog,
       },
     });
     const outputs = Object.fromEntries(
@@ -209,8 +224,42 @@ describe('release-state.sh (fake npm)', () => {
         .filter(Boolean)
         .map((line) => line.split(/=(.*)/s).slice(0, 2))
     );
-    return { ...res, outputs, summary: readFileSync(summary, 'utf8') };
+    const npmCalls = readFileSync(npmLog, 'utf8').split('\n').filter(Boolean);
+    return { ...res, outputs, npmCalls, summary: readFileSync(summary, 'utf8') };
   }
+
+  it('queries npm with exactly the expected arguments', () => {
+    const r = run('0.30.1', { version: e404, pkg: pkg(['0.30.0'], '0.30.0') });
+    expect(r.status).toBe(0);
+    // --prefer-online: npm's cache must not hide a just-published version or a moved `latest`.
+    expect(r.npmCalls).toEqual([
+      'view glassnode-api@0.30.1 version gitHead --json --prefer-online',
+      'view glassnode-api versions dist-tags --json --prefer-online',
+    ]);
+  });
+
+  it.each([
+    ['empty', 'dist_tag='],
+    ['missing', ''],
+    ['unexpected', 'dist_tag=beta'],
+    ['a semver range', 'dist_tag=v0.29'],
+    ['with trailing text', 'dist_tag=latest x'],
+  ])('fails, writing no outputs, on a %s dist-tag from release-plan.mjs', (_, line) => {
+    const plan = `console.log('latest=0.30.0');\nconsole.log(${JSON.stringify(line)});\nconsole.log('skipped=');\n`;
+    const r = run('0.30.1', { version: e404, pkg: pkg(['0.30.0'], '0.30.0') }, CHANGELOG, plan);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('Unexpected dist-tag');
+    expect(r.outputs).toEqual({});
+  });
+
+  it('accepts every dist-tag shape release-plan.mjs produces', () => {
+    for (const tag of ['latest', 'next', 'backport-0.29', 'backport-12.345']) {
+      const plan = `console.log('latest=0.30.0');\nconsole.log('dist_tag=${tag}');\nconsole.log('skipped=');\n`;
+      const r = run('0.30.1', { version: e404, pkg: pkg(['0.30.0'], '0.30.0') }, CHANGELOG, plan);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.outputs.dist_tag).toBe(tag);
+    }
+  });
 
   it('publishes a new version above latest under `latest`', () => {
     const r = run('0.30.1', {

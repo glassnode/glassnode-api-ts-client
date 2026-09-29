@@ -142,6 +142,11 @@ No change to the published package (#50).
     cancelled release), or `next` for a prerelease, so `latest` never moves backwards. Such a
     GitHub Release is not marked "Latest" (a prerelease is marked as one). The decision is in
     `scripts/release-plan.mjs`: SemVer 2.0.0 comparison with prereleases, no new dependency.
+    `release-state.sh` fails unless the tag is `latest`, `next` or `backport-<n>.<n>`.
+    `package.json` `publishConfig` no longer sets `tag: "latest"`: the guard relied on `--tag`
+    overriding it, and a manual publish or an older npm would still have forced `latest`. npm's
+    default tag is `latest` anyway (`npm publish --dry-run` still reports `latest`, and honours
+    `--tag backport-0.29`).
   - The release job summary warns about every `CHANGELOG.md` version between the last published
     version and the one being released that is missing on npm.
   - `ci.yml` checks the top `CHANGELOG.md` heading (`scripts/check-changelog-heading.mjs`): into
@@ -151,7 +156,7 @@ No change to the published package (#50).
   - CONTRIBUTING.md "Releases" and the `publish.yml` header explain the concurrency behaviour, the
     recovery (re-run; an older version gets a non-`latest` tag) and "merge release PRs one at a
     time". The scripts are tested in `test/release-scripts.spec.ts`, `release-state.sh` with a
-    fake `npm`.
+    fake `npm` whose arguments are asserted.
 
 ## 0.30.1
 

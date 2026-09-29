@@ -299,6 +299,10 @@ A major release is prepared on a long-lived `release/**` branch (e.g. `release/1
   tag name that is a valid semver range. That GitHub Release gets `--latest=false` (and
   `--prerelease` for a prerelease version). A re-run uses its own commit's workflow, so a run from
   before this guard (pre-1.0) publishes with npm's default tag: check `npm dist-tag ls` afterwards.
+  `release-state.sh` fails unless the tag matches `latest|next|backport-<n>.<n>`. `package.json`
+  `publishConfig` deliberately sets **no** `tag`: a `tag: "latest"` there would force `latest` on
+  a manual publish or an npm that does not let `--tag` override it (npm's default is `latest`
+  anyway). Keep it out.
 - It uses **npm Trusted Publishing (OIDC)** with provenance — there is **no `NPM_TOKEN`
   secret**. The Trusted Publisher for `glassnode-api` on npmjs.com must name repo
   `glassnode/glassnode-api-ts-client`, workflow `publish.yml` and environment `npm`.
