@@ -78,10 +78,12 @@ jobs:
       - run: pnpm dlx publint
       - run: pnpm dlx @arethetypeswrong/cli --pack .
 
-  # Prove the package's advertised floor (engines: ">=18"). Vitest 5 needs Node >=22.12, so this
-  # job does not run the suite — it builds, smoke-imports the CJS entry and runs a plain-Node
-  # runtime smoke (a real AbortSignal.timeout() abort -> GlassnodeNetworkError timedOut) on Node 18.
-  compat-node18:
+  # Prove the package's advertised floor (engines: ">=22.0.0"). The main job runs on Node 24, and
+  # Vitest 5 needs Node >=22.12, so this job does not run the suite — it builds, smoke-imports the
+  # CJS entry and runs a plain-Node runtime smoke (a real AbortSignal.timeout() abort ->
+  # GlassnodeNetworkError timedOut) on the floor major. The job name is version-neutral so the
+  # rulesets' required check survives the next floor bump; only node-version changes then.
+  compat-node-floor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,7 +94,7 @@ jobs:
           npm_config_ignore_scripts: 'false'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 18
+          node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build

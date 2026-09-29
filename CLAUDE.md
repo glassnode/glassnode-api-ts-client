@@ -14,7 +14,7 @@ This document provides context for Claude when working with this project.
     client and its schemas. Never hand-edit the fixtures; re-record them. A schema failure there is
     real API drift: fix the schema, never the fixture or the test
 - `/examples` - Example usage patterns (own `package.json`; type-checked via `tsconfig.examples.json`)
-- `/scripts` - `smoke-timeout.mjs`, the plain-Node runtime smoke run on Node 18 in CI;
+- `/scripts` - `smoke-timeout.mjs`, the plain-Node runtime smoke run on the Node floor (22) in CI;
   `record-fixtures.mjs`, which records the contract fixtures (needs an API key; run only to refresh)
 - `/typecheck/x402-node16` - consumer type-check fixture (node16 resolution, `skipLibCheck: false`)
 - `/dist` - Compiled output (not checked into git)
@@ -46,17 +46,22 @@ This document provides context for Claude when working with this project.
 
 Keep these separate; they answer different questions:
 
-- **Consumers of the published package** need **Node.js >= 18**. This is the contract in
-  `package.json` `engines`. The shipped code uses only universal APIs plus global `fetch`
-  (stable since Node 18) — no `node:` builtins. To enforce this at compile time, `@types/node`
-  is pinned to the **floor** (`^18`), not the latest, so the compiler rejects any API newer
-  than Node 18. Do **not** bump `@types/node` to track the dev runtime — bump it only if the
-  minimum supported Node is intentionally raised (a breaking change → major/`engines` bump).
+- **Consumers of the published package** need **Node.js >= 22** (raised from 18 in 1.0; Node 18
+  and 20 are end-of-life). This is the contract in `package.json` `engines`. The shipped code
+  uses only universal APIs plus global `fetch` — no `node:` builtins — and also runs in browsers,
+  so the floor is not a licence to use Node-only APIs. To enforce the floor at compile time,
+  `@types/node` is pinned to the **floor** (`^22`), not the latest, so the compiler rejects any
+  API newer than Node 22. Both approximate the floor: `engines` says `>=22.0.0`, but the CI floor
+  job runs the latest 22.x and `@types/node` is `^22.20`, so an API added after 22.0 is not
+  caught. Do **not** bump `@types/node` to track the dev runtime — bump it only
+  if the minimum supported Node is intentionally raised (a breaking change → major/`engines`
+  bump).
 - **Developers of this repo** run **Node.js 24** (`.nvmrc`, the main CI and publish jobs). The dev toolchain
-  sets the floor here: `vitest` 5 requires Node `>= 22.12`, so the test suite cannot run on
-  Node 18/20 — that constraint is dev-only and never reaches consumers (vitest is a
-  devDependency). The CI `compat-node18` job proves the consumer floor instead: on Node 18 it
-  builds, `require`s the CJS entry and runs `scripts/smoke-timeout.mjs`.
+  sets the floor here: `vitest` 5 requires Node `>= 22.12` — that constraint is dev-only and never
+  reaches consumers (vitest is a devDependency). The CI `compat-node-floor` job proves the
+  consumer floor instead: on Node 22 it builds, `require`s the CJS entry and runs
+  `scripts/smoke-timeout.mjs`. Its name is version-neutral on purpose: the rulesets require it by
+  name, so a later floor bump changes only its `node-version`.
 
 ## Coding Standards
 
@@ -212,7 +217,8 @@ Relative imports in `src/` are written `./foo.js` even though the file is `foo.t
   `examples/` (module-resolution guard, no example runs), `build`, `build:browser`, the
   `typecheck/x402-node16` consumer check, `docs` (TypeDoc), `publint` and
   `@arethetypeswrong/cli --pack .`.
-- `compat-node18` (Node 18): build, CJS `require` smoke, `scripts/smoke-timeout.mjs`.
+- `compat-node-floor` (Node 22, the `engines` floor): build, CJS `require` smoke,
+  `scripts/smoke-timeout.mjs`.
 
 `.github/workflows/docs.yml` builds the API reference on every push to `main` and deploys it to
 GitHub Pages (https://glassnode.github.io/glassnode-api-ts-client/). It requires the repo setting
@@ -254,7 +260,7 @@ A major release is prepared on a long-lived `release/**` branch (e.g. `release/1
 - `main` is protected by a ruleset: no direct pushes, changes land through PRs with the
   required CI checks. Every change reaches `main` through a merged PR.
 - On every push to `main` (a merge):
-  1. `verify` runs `ci.yml` (the full CI check list, `test` and `compat-node18`), read-only.
+  1. `verify` runs `ci.yml` (the full CI check list, `test` and `compat-node-floor`), read-only.
   2. `release` (read-only) runs `scripts/release-state.sh`: `npm view glassnode-api@<version>`.
      Only an E404 means "not published"; any other `npm view` failure (network, registry error)
      fails the job, never publishes. If the version is already on npm (a merge without a bump, a

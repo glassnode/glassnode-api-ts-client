@@ -93,6 +93,20 @@
     unpaid attempts are ever retried.
   - **Opt out:** pass `maxRetries: 0` for the previous single-attempt behaviour.
 
+- **Node.js >= 22 is now required** (`engines.node` is `>=22.0.0`, was `>=18.0.0`) (#48). Node 18
+  reached end-of-life in April 2025 and Node 20 in April 2026; Node 22 is in maintenance until
+  April 2027. `@types/node` moves to the new floor (`^22`), so the compiler still rejects APIs newer
+  than the oldest supported Node. The CI floor job `compat-node18` becomes `compat-node-floor`
+  and runs on Node 22 (same steps: build, CJS `require` smoke, `scripts/smoke-timeout.mjs`). No
+  code or output changes: the `tsconfig*.json` `target`/`lib` are unchanged (the Node builds'
+  ES2022 already fits Node 22, and their ESM output also reaches browsers through bundlers; the
+  browser bundles stay ES2015), and the client keeps its own `AbortSignal.any()` stand-in for older
+  browsers.
+
+  **Migration:** upgrade to Node.js 22 or later. On Node 18 or 20, stay on 0.x: package managers
+  that enforce `engines` (e.g. with `engine-strict`) refuse to install 1.0, and it is not tested
+  there.
+
 ### Build
 
 - `tsconfig.browser.json` uses `module: ESNext` and `moduleResolution: bundler` instead of the

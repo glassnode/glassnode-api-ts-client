@@ -9,7 +9,7 @@ the release** (`.github/workflows/publish.yml`). `main` only accepts changes thr
 ## Prerequisites
 
 - **Node.js 24** for development (see `.nvmrc`; the test runner, Vitest, needs Node >= 22.12).
-  Consumers of the published package only need Node.js >= 18.
+  Consumers of the published package only need Node.js >= 22.
 - **pnpm** (the version is pinned in `package.json` `packageManager`; `corepack enable` picks it
   up).
 
@@ -40,13 +40,13 @@ Project layout:
 - `src/types/` - Zod schemas and the types inferred from them
 - `test/` - Vitest tests, including the contract tests in `test/contract.spec.ts`
 - `examples/` - runnable usage examples (their own `package.json`)
-- `scripts/` - the Node 18 smoke test and the contract fixture recorder
+- `scripts/` - the Node-floor smoke test and the contract fixture recorder
 - `typecheck/x402-node16/` - a consumer type-check fixture
 
 Add or update tests for what you change. The public API is what `src/index.ts` and `src/x402.ts`
 export; if you change it, update `README.md` to match and give every new export a doc comment.
-The shipped code must keep running on Node.js 18 and in browsers: no `node:` built-ins and no APIs
-newer than Node 18 in `src/`.
+The shipped code must keep running on Node.js 22 and in browsers: no `node:` built-ins and no APIs
+newer than Node 22 in `src/`.
 
 ### 3. Bump the version and add a changelog entry
 

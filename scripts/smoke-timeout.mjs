@@ -1,4 +1,4 @@
-// Runtime smoke for the published CJS build (dist/), run on the Node floor (18) in CI where Vitest
+// Runtime smoke for the published CJS build (dist/), run on the Node floor (22) in CI where Vitest
 // cannot run. Proves a real `AbortSignal.timeout()` abort surfaces as a GlassnodeNetworkError
 // with `timedOut === true` on this runtime, and that a per-call `signal` combined with that
 // timeout (the client's own AbortSignal.any() stand-in) cancels as a GlassnodeAbortError. Not published (package.json `files` is dist-only).
