@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.30.0
+
+- Fixed: **`callBulkMetric()` no longer fails the whole call when one asset has no value.**
+  `BulkEntrySchema` now accepts `v: null`, matching `TimeSeriesPointSchema` and the lenient-output
+  policy of 0.12.0 (strict enums for inputs, lenient for outputs). Previously a single entry such
+  as `{ a: 'XYZ', v: null }` made the response fail validation with a `GlassnodeValidationError`
+  (`0.bulk.1.v: Invalid input: expected number, received null`) for every asset; now it parses,
+  that entry keeps `v: null` and the other entries are intact. A non-numeric, non-null `v` is
+  still rejected. Fixes #24.
+  - **Type-level (source-breaking for some readers):** `BulkEntry['v']` (and so
+    `BulkResponse[number]['bulk'][number]['v']`) changes from `number` to `number | null`. Code
+    using it as a `number` (arithmetic, sorting, formatting) must handle `null`: default it
+    (`entry.v ?? 0`) or filter the nulls out, e.g.
+    `bulk.filter((e): e is typeof e & { v: number } => e.v !== null)`. No runtime change for
+    responses without nulls. Released as a minor bump under 0.x, per the 0.12.0 `LagPercentiles`
+    precedent.
+- Docs: the `BulkEntrySchema` doc comment and the README "Bulk Metrics" section explain the null;
+  `examples/ex.bulk.market-cap.ts` filters out null values before ranking.
+
 ## 0.29.5
 
 - Dev dependencies: the `pnpm.overrides` entry for `brace-expansion@5` is raised from `>=5.0.6` to

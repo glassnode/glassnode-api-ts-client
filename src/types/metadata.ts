@@ -381,11 +381,17 @@ export const MetricStatsResponseSchema = z.object({
 export type MetricStatsResponse = z.infer<typeof MetricStatsResponseSchema>;
 
 /**
- * Bulk entry schema (one asset's value in a bulk response)
+ * Bulk entry schema (one asset's value in a bulk response): `{ a, v, network? }`.
+ *
+ * - `a` — the asset.
+ * - `v` — the value. `null` is accepted: the docs do not promise that `v` is never null, and a
+ *   response schema is lenient by design, so a gap in the data for one asset does not fail the
+ *   whole bulk call. Handle it before doing arithmetic (e.g. `v ?? 0`, or filter out the nulls).
+ * - `network` — the network, for assets that have one.
  */
 export const BulkEntrySchema = z.object({
   a: z.string(),
-  v: z.number(),
+  v: z.number().nullable(),
   network: z.string().optional(),
 });
 
