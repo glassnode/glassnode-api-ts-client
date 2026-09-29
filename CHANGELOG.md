@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.29.5
+
+- Dev dependencies: the `pnpm.overrides` entry for `brace-expansion@5` is raised from `>=5.0.6` to
+  `>=5.0.9`, and `pnpm-lock.yaml` now resolves `brace-expansion@5.0.12` (was `5.0.7`, reached via
+  `eslint > minimatch`), fixing GHSA-mh99-v99m-4gvg and GHSA-rgw5-rvv9-x895. The override stays
+  because `minimatch@10.2.4`, still in the tree, allows older 5.x versions.
+- Examples: `examples/package-lock.json` now resolves `diff@4.0.4` (was `4.0.2`, via `ts-node`),
+  fixing GHSA-73rr-hh4g-fpgx. `pnpm audit` and `npm audit` in `examples/` are both clean.
+  Dev-only; no change to the published package.
+
 ## 0.29.4
 
 - CI: `ci.yml` now also runs on pull requests into `release/**` branches (e.g. `release/1.0`), not
