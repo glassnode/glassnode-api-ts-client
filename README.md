@@ -547,6 +547,10 @@ const marketcaps = await api.callBulkMetric('/market/marketcap_usd');
 // [{ t: 1609459200, bulk: [{ a: 'BTC', v: 600000000000 }, { a: 'ETH', v: 100000000000 }] }]
 ```
 
+Pass the **base** metric path: `callBulkMetric()` appends `/bulk` itself. The bulk variant path the
+metadata advertises (`refs.metric_variant.bulk`, e.g. `/market/marketcap_usd/bulk`) is rejected
+with a `GlassnodeInputError` before any request.
+
 An entry's `v` is `number | null`: it can be `null` for an asset without data at that timestamp,
 and the rest of the response still parses. Handle it before doing arithmetic, e.g. `v ?? 0`, or
 filter the nulls out:
