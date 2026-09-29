@@ -26,8 +26,11 @@ async function getAssetsByMarketCap() {
   const latest = result[result.length - 1];
   const date = new Date(latest.t * 1000).toISOString().split('T')[0];
 
-  // Sort assets by market cap descending
-  const ranked = latest.bulk.filter((entry) => entry.v > 0).sort((a, b) => b.v - a.v);
+  // Sort assets by market cap descending. `v` is null for an asset without data, so drop those
+  // (and zero values) first; the type guard narrows `v` to `number` for the sort.
+  const ranked = latest.bulk
+    .filter((entry): entry is typeof entry & { v: number } => entry.v !== null && entry.v > 0)
+    .sort((a, b) => b.v - a.v);
 
   console.log(`Top 20 assets by market cap (${date}):\n`);
   console.log('  #   Asset       Market Cap');
