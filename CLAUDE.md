@@ -158,10 +158,21 @@ merged without a bump publishes nothing (see [Publishing](#publishing)).
   the folder as ESM. `exports` uses per-condition `types` (ESM `.d.ts` for `import`, CJS for
   `require`) — verified with `publint` + `@arethetypeswrong/cli` in CI.
 - **Browser**: Rollup (`tsconfig.browser.json`) produces minified UMD
-  (`dist/glassnode-api.umd.min.js`, global `GlassnodeAPI`, the `browser` field) and minified ESM
+  (`dist/glassnode-api.umd.min.js`, global `GlassnodeAPI`) and minified ESM
   (`dist/glassnode-api.esm.min.js`) bundles from `src/index.ts`, with `zod` bundled in and
   `src/x402.ts` excluded. The `module` field points at the unbundled `dist/esm/index.js`, not a
   Rollup bundle. Source maps are generated `hidden` and not published.
+  `tsconfig.browser.json` uses `module: ESNext` + `moduleResolution: bundler` (not the deprecated
+  `node`/`node10`, which TypeScript 7 drops); `@rollup/plugin-node-resolve` does the actual
+  resolution, so the setting only affects type-checking.
+- **CDN entry**: the `unpkg` and `jsdelivr` fields point at the UMD bundle, so the bare package URL
+  on those CDNs serves it (unpkg never read `browser`: it served the CJS `main` before 1.0). There
+  is deliberately **no** top-level `browser` field and **no** `browser` condition in `exports`. A
+  `browser` condition inside `exports` would steer webpack 5, Vite and esbuild
+  (`platform: 'browser'`) to the pre-minified bundle with `zod` inlined instead of the
+  tree-shakeable ESM build. The top-level field is ignored by them whenever `exports` exists; it
+  only affected `exports`-unaware tools such as Browserify. Keep both out, even though `publint`
+  suggested the condition (#37).
 - Config: `tsconfig.json` (CJS), `tsconfig.esm.json` (ESM), `tsconfig.browser.json` (browser),
   `tsconfig.test.json` (tests/IDE), `tsconfig.examples.json` (type-checks `examples/` against
   `src/` using root deps), `examples/tsconfig.json` (ts-node config for running the examples;

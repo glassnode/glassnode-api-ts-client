@@ -43,6 +43,34 @@
     To keep treating `0` as "not recorded", use `meta.modified || undefined` (or check for `0`)
     before converting.
 
+- `package.json` no longer has a top-level `browser` field; `unpkg` and `jsdelivr` fields point at
+  `dist/glassnode-api.umd.min.js` instead (#37). `exports` gets no `browser` condition, so
+  `exports`-aware tools (Node, webpack 5, Vite, esbuild, Rollup, TypeScript) resolve exactly as
+  before: the tree-shakeable ESM build (`import`) or CommonJS (`require`). Both bundles still ship
+  at the same paths.
+  - **CDNs:** the bare `https://unpkg.com/glassnode-api` URL now serves the UMD bundle. unpkg
+    ignores `browser`, so it used to serve the CommonJS `main` (`dist/index.js`), which fails in a
+    `<script>` tag. jsDelivr already served the UMD bundle through `browser` and still does,
+    through `jsdelivr`. Explicit `dist/…min.js` URLs are unchanged.
+  - **Who is affected:** tools that read `browser` and ignore `exports`, chiefly **Browserify**
+    (or a bundler with `exports` resolution turned off). Browserify now bundles `dist/index.js` plus
+    zod's CommonJS build instead of the UMD bundle. It still works, with the same API, but the
+    output is about 6× larger: about 186 KB gzipped instead of 31 KB.
+  - **Migration:** to keep the smaller bundle in Browserify, require the UMD file by path,
+    `require('glassnode-api/dist/glassnode-api.umd.min.js')`, or map `glassnode-api` to it (e.g.
+    with a `browser` field in your own `package.json`). Browserify ignores `exports`, so the deep
+    path resolves; `exports`-aware tools cannot import it, and do not need to. In a page, load it
+    with a `<script>` tag from a CDN or your own copy.
+  - webpack 4 is not affected: it could not parse the package before this change (the UMD bundle
+    uses `?.`) and still cannot (the ESM build targets ES2022). It needs `node_modules`
+    transpiled either way.
+
+### Build
+
+- `tsconfig.browser.json` uses `module: ESNext` and `moduleResolution: bundler` instead of the
+  deprecated `moduleResolution: node` (`node10`), so `build:browser` no longer warns TS5107 and
+  keeps working on TypeScript 7 (#35). The browser bundles are byte-identical before and after.
+
 ## 0.30.1
 
 - Fix: `callBulkMetric()` now rejects a `metricPath` ending in `/bulk` (e.g. the metadata's

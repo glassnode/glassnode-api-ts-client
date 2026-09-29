@@ -5,7 +5,8 @@
   "description": "TypeScript client for the Glassnode API (Node.js and browsers)",
   "main": "dist/index.js",
   "types": "./dist/index.d.ts",
-  "browser": "dist/glassnode-api.umd.min.js",
+  "unpkg": "dist/glassnode-api.umd.min.js",
+  "jsdelivr": "dist/glassnode-api.umd.min.js",
   "module": "./dist/esm/index.js",
   "files": [
     "dist/**/*.js",

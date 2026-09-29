@@ -701,6 +701,12 @@ a Glassnode API key to a browser — anyone can read it from the page.
 </script>
 ```
 
+The bare package URL (`https://unpkg.com/glassnode-api`, `https://cdn.jsdelivr.net/npm/glassnode-api`)
+serves the UMD bundle, via the package's `unpkg` and `jsdelivr` fields. Pin a version in production
+(e.g. `glassnode-api@1.0.0`). Bundlers (webpack, Vite, esbuild, Rollup) do not use these bundles:
+they resolve `glassnode-api` through `exports` to the tree-shakeable ESM build, which shares `zod`
+with your app.
+
 The bundles also work unchanged where CORS does not apply, such as browser extensions with host
 permissions for `api.glassnode.com` (from the background script), or Deno, Bun and other non-browser
 runtimes. If you do call Glassnode directly from a browser context, keep the default
