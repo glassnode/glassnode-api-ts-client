@@ -140,6 +140,24 @@ function assertMetricPath(path: unknown): asserts path is string {
 }
 
 /**
+ * Validate a metric path for callBulkMetric, which appends `/bulk` itself: on top of
+ * assertMetricPath, a path that already ends in a `/bulk` segment (e.g. the metadata's
+ * `refs.metric_variant.bulk`) is rejected rather than silently rewritten, since it would request
+ * `…/bulk/bulk`. The message suggests the base path and never echoes a URL or a query string.
+ */
+function assertBulkMetricPath(path: unknown): asserts path is string {
+  assertMetricPath(path);
+  if (!path.endsWith('/bulk')) return;
+  const base = path.slice(0, -'/bulk'.length);
+  const hint = base === '' ? '' : ` (did you mean ${JSON.stringify(base)}?)`;
+  throw new GlassnodeInputError(
+    `Invalid metricPath: ${JSON.stringify(path)} must not end in "/bulk" — callBulkMetric ` +
+      `appends it; pass the base path${hint}`,
+    { argument: 'metricPath' }
+  );
+}
+
+/**
  * The epoch-ms time of a Date (NaN for an invalid one), or undefined if `value` is not a Date.
  * A brand check rather than `instanceof`, so a Date from another realm (iframe, `vm`) counts too.
  */
@@ -959,15 +977,18 @@ export class GlassnodeAPI {
   }
 
   /**
-   * Call a bulk metric endpoint (returns data for all assets at once)
-   * @param metricPath Path of the metric (e.g. /market/marketcap_usd)
+   * Call a bulk metric endpoint (returns data for all assets at once). `/bulk` is appended to
+   * `metricPath`, so pass the base path (e.g. `/market/marketcap_usd`), not the bulk variant path
+   * from the metadata's `refs.metric_variant.bulk` (e.g. `/market/marketcap_usd/bulk`).
+   * @param metricPath Base path of the metric (e.g. /market/marketcap_usd), without `/bulk`
    * @param params Query parameters (see {@link MetricParams})
    * @param options Per-call options: `signal` to cancel, `timeout` to override the config one
    *   (see {@link CallOptions})
    * @returns Promise resolving to validated bulk response
    * @throws GlassnodeInputError (as a rejected promise, before any request) if `metricPath` is
-   *   malformed, `params.f` is anything but `json`, `params` contains `api_key`, a param value
-   *   cannot be converted (see `MetricParamValue`), or `options` is invalid
+   *   malformed or ends in `/bulk`, `params.f` is anything but `json`, `params` contains
+   *   `api_key`, a param value cannot be converted (see `MetricParamValue`), or `options` is
+   *   invalid
    * @throws GlassnodeAbortError if `options.signal` aborts (or was already aborted)
    */
   async callBulkMetric(
@@ -975,7 +996,7 @@ export class GlassnodeAPI {
     params: MetricParams = {},
     options?: CallOptions
   ): Promise<BulkResponse> {
-    assertMetricPath(metricPath);
+    assertBulkMetricPath(metricPath);
     const query = normalizeParams(params, { format: true });
     const callOptions = normalizeCallOptions(options);
     const endpoint = '/v1/metrics' + metricPath + '/bulk';

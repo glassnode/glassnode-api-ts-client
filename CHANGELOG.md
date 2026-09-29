@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.30.1
+
+- Fix: `callBulkMetric()` now rejects a `metricPath` ending in `/bulk` (e.g. the metadata's
+  `refs.metric_variant.bulk`, `/market/marketcap_usd/bulk`) with a `GlassnodeInputError`
+  (`argument: 'metricPath'`) before any request, telling you to pass the base path
+  (`/market/marketcap_usd`). It appends `/bulk` itself, so such a path used to request
+  `…/bulk/bulk` and fail with a confusing 404 `GlassnodeApiError`. The path is rejected, not
+  silently rewritten, like other malformed paths. `callMetric()` with a `/bulk` path is unchanged.
+  The `callBulkMetric` doc comment and the README's Bulk Metrics section say to pass the base path.
+
 ## 0.30.0
 
 - Fixed: **`callBulkMetric()` no longer fails the whole call when one asset has no value.**
