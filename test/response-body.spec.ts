@@ -1,7 +1,11 @@
 import { createServer, type RequestListener, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlassnodeAPI } from '../src/glassnode-api';
-import { GlassnodeAbortError, GlassnodeNetworkError } from '../src/errors';
+import {
+  GlassnodeAbortError,
+  GlassnodeNetworkError,
+  GlassnodeValidationError,
+} from '../src/errors';
 
 const servers: Server[] = [];
 afterEach(async () => {
@@ -26,6 +30,65 @@ async function serve(handler: RequestListener) {
 }
 
 describe('response body transport and cancellation', () => {
+  it.each(['consumed', 'locked', 'missing json', 'custom json'])(
+    'does not retry a deterministic response failure: %s',
+    async (kind) => {
+      const response = new Response('[]');
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      const cause = new Error('custom parser failed');
+      if (kind === 'consumed') await response.json();
+      if (kind === 'locked') reader = response.body!.getReader();
+      if (kind === 'missing json') Object.defineProperty(response, 'json', { value: undefined });
+      if (kind === 'custom json') {
+        response.json = vi.fn().mockRejectedValue(cause);
+      }
+      const fetchFn = vi.fn().mockResolvedValue(response);
+      const onRetry = vi.fn();
+      const api = new GlassnodeAPI({
+        apiKey: 'unused',
+        fetch: fetchFn,
+        retryDelay: 1,
+        hooks: { onRetry },
+      });
+      try {
+        const error = await api.getMetricList().catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(GlassnodeValidationError);
+        expect((error as Error).cause).toBeInstanceOf(Error);
+        if (kind === 'custom json') expect((error as Error).cause).toBe(cause);
+        expect(fetchFn).toHaveBeenCalledOnce();
+        expect(onRetry).not.toHaveBeenCalled();
+      } finally {
+        reader?.releaseLock();
+      }
+    }
+  );
+
+  it('retries an arbitrary error raised by a response body stream', async () => {
+    const cause = new Error('stream failed');
+    const response = new Response(
+      new ReadableStream({
+        start(c) {
+          c.error(cause);
+        },
+      })
+    );
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(new Response('[]'));
+    const onRetry = vi.fn();
+    const api = new GlassnodeAPI({
+      apiKey: 'unused',
+      fetch: fetchFn,
+      retryDelay: 1,
+      hooks: { onRetry },
+    });
+    await expect(api.getMetricList()).resolves.toEqual([]);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(onRetry.mock.calls[0][0].error).toMatchObject({ cause });
+    expect(onRetry.mock.calls[0][0].reason).toBe('network');
+  });
+
   it('retries timeouts after real 200 headers with fresh attempt signals and timeout hooks', async () => {
     let requests = 0;
     const apiUrl = await serve((_req, res) => {

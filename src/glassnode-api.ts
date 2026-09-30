@@ -796,9 +796,12 @@ export class GlassnodeAPI {
           throw detail ? new GlassnodeApiError(response.status, statusText, detail) : error;
         }
 
-        // Headers can arrive before the body fails in transit. Only invalid JSON is a
-        // validation failure; a body transfer failure follows the transport retry policy.
+        // Headers can arrive before the body fails in transit. Track whether json() actually
+        // started consuming a usable stream: errors from an unusable response or a custom
+        // json() implementation must not be mistaken for failed transfers.
+        let readableBody = false;
         try {
+          readableBody = !!response.body && !response.bodyUsed && !response.body.locked;
           return (await response.json()) as unknown;
         } catch (parseError) {
           // A paid response stream classifies its own failures; never repeat its payment.
@@ -811,7 +814,12 @@ export class GlassnodeAPI {
             (typeof parseError === 'object' &&
               parseError !== null &&
               (parseError as { name?: unknown }).name === 'SyntaxError');
-          if (failure && !syntaxError) {
+          const bodyReadStarted = readableBody && response.bodyUsed;
+          const explicitAbort =
+            typeof parseError === 'object' &&
+            parseError !== null &&
+            ABORT_NAMES.has(String((parseError as { name?: unknown }).name));
+          if (failure && !syntaxError && (bodyReadStarted || explicitAbort)) {
             retryAfterMs = undefined;
             lastError = new GlassnodeNetworkError(
               `Glassnode API error: ${this.redact(failure.message)}`,
