@@ -1105,3 +1105,93 @@ describe('createX402Fetch — PAYMENT_HEADERS tracks @x402/core', () => {
     }
   );
 });
+
+describe('paid successful response body failures', () => {
+  it.each(['timeout', 'caller abort', 'connection reset'])(
+    '%s remains a payment error with one signed payment, even with retries enabled',
+    async (kind) => {
+      const controller = new AbortController();
+      const reason = new Error('caller cancelled');
+      const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+      const baseFetch = vi.fn(async (input: RequestInfo | URL) => {
+        if (!isPaidCall([input])) return response402();
+        const signal = (input as Request).signal;
+        return new Response(
+          new ReadableStream({
+            start(body) {
+              body.enqueue(new TextEncoder().encode('['));
+              signal.addEventListener('abort', () => body.error(signal.reason), { once: true });
+              if (kind === 'caller abort') setTimeout(() => controller.abort(reason), 10);
+              if (kind === 'connection reset')
+                setTimeout(() => body.error(new TypeError('terminated')), 10);
+            },
+          })
+        );
+      });
+      const wrapped = await createX402Fetch({
+        account: fakeAccount(signTypedData),
+        fetch: baseFetch,
+      });
+      const api = paidApi(wrapped, {
+        maxRetries: 2,
+        ...(kind === 'timeout' ? { timeout: 100 } : {}),
+      });
+      const error = await caught(api.getMetricList({ signal: controller.signal }));
+      expect(error).toBeInstanceOf(GlassnodePaymentError);
+      expect((error as GlassnodePaymentError).paymentMayHaveSettled).toBe(true);
+      expect((error as GlassnodePaymentError).timedOut).toBe(kind === 'timeout');
+      if (kind === 'caller abort') expect((error as Error).cause).toBe(reason);
+      expect(signTypedData).toHaveBeenCalledOnce();
+      expect(baseFetch).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('invalid paid JSON is still a non-retried validation failure', async () => {
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const baseFetch = vi.fn(async (input: RequestInfo | URL) =>
+      isPaidCall([input]) ? new Response('not JSON') : response402()
+    );
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch,
+    });
+    const error = await caught(paidApi(wrapped, { maxRetries: 2 }).getMetricList());
+    expect((error as Error).name).toBe('GlassnodeValidationError');
+    expect(signTypedData).toHaveBeenCalledOnce();
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('paid response stream compatibility', () => {
+  it('preserves status, headers, metadata and cloning', async () => {
+    const response = new Response('[]', { status: 201, headers: { 'X-Audit': 'ok' } });
+    Object.defineProperties(response, {
+      url: { value: 'https://x402.glassnode.com/v1/metadata/metrics' },
+      type: { value: 'basic' },
+    });
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(),
+      fetch: async (input) => (isPaidCall([input]) ? response : response402()),
+    });
+    const result = await wrapped('https://x402.glassnode.com/v1/metadata/metrics');
+    const clone = result.clone();
+    expect(result.status).toBe(201);
+    expect(result.headers.get('X-Audit')).toBe('ok');
+    expect(clone.url).toBe(response.url);
+    expect(clone.type).toBe('basic');
+    expect(clone.redirected).toBe(response.redirected);
+    await expect(Promise.all([result.json(), clone.json()])).resolves.toEqual([[], []]);
+  });
+
+  it('cancelling a paid response body cancels its original stream', async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }));
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(),
+      fetch: async (input) => (isPaidCall([input]) ? response : response402()),
+    });
+    const result = await wrapped('https://x402.glassnode.com/v1/metadata/metrics');
+    await result.body!.cancel();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+});

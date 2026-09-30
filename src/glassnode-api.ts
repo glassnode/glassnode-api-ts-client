@@ -720,7 +720,7 @@ export class GlassnodeAPI {
             ? combineSignals(signal, AbortSignal.timeout(timeout))
             : { signal: AbortSignal.timeout(timeout), dispose: () => {} };
       try {
-        // Transport step — the only part that is retried on failure.
+        // Transport to the headers; successful response-body transfers are checked below too.
         let response: Response;
         const sentAt = performance.now();
         try {
@@ -781,20 +781,48 @@ export class GlassnodeAPI {
             lastError = error;
             // Honour the server's Retry-After (e.g. on 429) for the next wait, if present.
             retryAfterMs = this.parseRetryAfter(response);
+            // A discarded streaming body still owns a connection. Do not wait to drain it.
+            try {
+              await response.body?.cancel();
+            } catch {
+              // Cleanup must not replace the HTTP failure that caused the retry.
+            }
             continue;
           }
           // Surface the server's error body (e.g. "Resolution 1h is not allowed") in the message,
           // with the API key masked: a server or proxy may echo the request URL or the key.
           const detail = await readErrorDetail(response, [this.apiKey]);
+          if (signal?.aborted) throw aborted();
           throw detail ? new GlassnodeApiError(response.status, statusText, detail) : error;
         }
 
-        // Success. Parsing a 200 body is NOT a transient error, so it is thrown, never retried.
+        // Headers can arrive before the body fails in transit. Only invalid JSON is a
+        // validation failure; a body transfer failure follows the transport retry policy.
         try {
           return (await response.json()) as unknown;
         } catch (parseError) {
+          // A paid response stream classifies its own failures; never repeat its payment.
+          if (parseError instanceof GlassnodeError) throw parseError;
           // Reading the body was cut off by the caller's abort: that is not a malformed body.
           if (signal?.aborted) throw aborted();
+          const failure = describeTransportFailure(parseError);
+          const syntaxError =
+            parseError instanceof SyntaxError ||
+            (typeof parseError === 'object' &&
+              parseError !== null &&
+              (parseError as { name?: unknown }).name === 'SyntaxError');
+          if (failure && !syntaxError) {
+            retryAfterMs = undefined;
+            lastError = new GlassnodeNetworkError(
+              `Glassnode API error: ${this.redact(failure.message)}`,
+              {
+                cause: parseError,
+                timedOut: failure.timedOut || (attemptSignal.signal?.aborted ?? false),
+              }
+            );
+            if (attempt < this.maxRetries) continue;
+            throw lastError;
+          }
           throw new GlassnodeValidationError(
             'Glassnode API error: failed to parse response body as JSON',
             { cause: parseError, endpoint }

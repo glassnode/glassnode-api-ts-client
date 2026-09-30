@@ -81,15 +81,16 @@ export function createMaxAmountPolicy(maxAtomic: bigint) {
  * - Invalid `maxPaymentPerCall` → rejects with `GlassnodeInputError` (`argument: 'maxPaymentPerCall'`).
  * - Optional peer deps not installed → rejects with `GlassnodeConfigError` (import error on `.cause`).
  *
- * The returned fetch rejects with a `GlassnodePaymentError` (surfaced as-is and never retried by
- * `GlassnodeAPI`) when:
+ * The returned fetch, or reading its successful paid response body, rejects with a
+ * `GlassnodePaymentError` (surfaced as-is and never retried by `GlassnodeAPI`) when:
  * - the payment layer fails before a paid request is sent — e.g. the server's price is above
  *   `maxPaymentPerCall`, the signer throws, or the `402` carries no usable payment requirements
  *   (`paymentMayHaveSettled: false`: nothing was paid);
  * - the call fails **after** a request carrying a signed payment was sent (`paymentMayHaveSettled:
  *   true`). The server may already have settled that payment and a retry would sign a new one,
  *   so it is never retried. Either the paid request failed in transit (connection reset,
- *   `timeout` abort: the transport error on `.cause`, `timedOut` set for a timeout), or it was
+ *   `timeout` abort, including during a successful response body's transfer: the transport error
+ *   on `.cause`, `timedOut` set for a timeout), or it was
  *   answered with a non-2xx status other than `402` — e.g. a proxy `502`/`504` after the origin
  *   settled, a `429`, a `400` — (`status` set, the equivalent `GlassnodeApiError` on `.cause`).
  *
@@ -191,8 +192,65 @@ export async function createX402Fetch(options: X402FetchOptions): Promise<typeof
     if (paymentSent && !response.ok && response.status !== 402) {
       throw await toPaidHttpError(response, keys);
     }
-    return response;
+    return paymentSent && response.ok && response.body
+      ? guardPaidBody(
+          response,
+          keys,
+          init?.signal ?? (input instanceof Request ? input.signal : undefined)
+        )
+      : response;
   };
+}
+
+/** Preserve payment classification when a successful response later fails while being read. */
+function guardPaidBody(response: Response, keys: string[], signal?: AbortSignal | null): Response {
+  const reader = response.body!.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          reader.releaseLock();
+          controller.close();
+        } else controller.enqueue(value);
+      } catch (error) {
+        reader.releaseLock();
+        const paymentError = toPaidTransportError(error, keys);
+        // Some fetches reject body reads with AbortError even for a timeout signal.
+        if (signal?.aborted && signal.reason?.name === 'TimeoutError' && !paymentError.timedOut) {
+          controller.error(
+            new GlassnodePaymentError(paymentError.message, {
+              cause: error,
+              paymentMayHaveSettled: true,
+              timedOut: true,
+            })
+          );
+        } else controller.error(paymentError);
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+  const guarded = new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+  // A constructed Response otherwise loses the final URL and redirect/type metadata.
+  const preserveMetadata = (result: Response): Response => {
+    for (const name of ['url', 'redirected', 'type'] as const) {
+      Object.defineProperty(result, name, { value: response[name] });
+    }
+    const clone = result.clone.bind(result);
+    Object.defineProperty(result, 'clone', { value: () => preserveMetadata(clone()) });
+    return result;
+  };
+  return preserveMetadata(guarded);
 }
 
 /**
