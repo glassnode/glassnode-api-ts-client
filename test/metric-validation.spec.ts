@@ -19,7 +19,9 @@ import { API_KEY } from './constants';
 const ENDPOINT = '/v1/metrics/market/price_usd_close';
 
 function apiReturning(body: unknown) {
-  const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(body) });
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify(body)) });
   return { api: new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn }), fetchFn };
 }
 
@@ -174,7 +176,7 @@ describe('callMetric without a schema (unchanged)', () => {
     const body = { not: 'a series' };
     const { api } = apiReturning(body);
     const result = await api.callMetric('/market/price_usd_close', { a: 'BTC' });
-    expect(result).toBe(body);
+    expect(result).toEqual(body);
   });
 
   it('keeps the `callMetric<T>` cast typing', async () => {

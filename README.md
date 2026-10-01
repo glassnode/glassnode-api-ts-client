@@ -451,6 +451,12 @@ failure, timeout, `429` or `5xx` is then retried only while no payment has been 
 payment has gone out, a failure — whatever the HTTP status — is **never** retried; see
 [Errors](#x402-errors) below.
 
+In x402 mode, a body-transfer failure after successful headers from a plain payment fetch raises
+`GlassnodeNetworkError` without retrying, even with an explicit `maxRetries`: the successful
+request may already have been paid. Body transfers can only be retried for responses that
+`createX402Fetch` identifies as unpaid. A plain wrapper still requires `maxRetries: 0` to avoid
+repeating payments after failures before headers or paid `429`/`5xx` responses.
+
 ## Cancellation and per-call timeouts
 
 Every method takes an optional last argument, `options: { signal?: AbortSignal; timeout?: number }`

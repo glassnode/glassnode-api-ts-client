@@ -1107,6 +1107,56 @@ describe('createX402Fetch — PAYMENT_HEADERS tracks @x402/core', () => {
 });
 
 describe('paid successful response body failures', () => {
+  it('uses a Request input timeout reason when a paid body reports AbortError', async () => {
+    const reason = new DOMException('deadline', 'TimeoutError');
+    const cause = new DOMException('body aborted', 'AbortError');
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const baseFetch = vi.fn(async (input: RequestInfo | URL) =>
+      isPaidCall([input])
+        ? new Response(
+            new ReadableStream({
+              start(c) {
+                c.error(cause);
+              },
+            })
+          )
+        : response402()
+    );
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch,
+    });
+    const response = await wrapped(new Request(METRICS_URL, { signal: AbortSignal.abort(reason) }));
+    const error = await caught(response.text());
+    expect(error).toBeInstanceOf(GlassnodePaymentError);
+    expect(error).toMatchObject({ timedOut: true, paymentMayHaveSettled: true, cause });
+    expect(signTypedData).toHaveBeenCalledOnce();
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('still retries a failed successful unpaid body when retries are enabled', async () => {
+    const baseFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.error(new TypeError('terminated'));
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(new Response('[]'));
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch,
+    });
+    await expect(paidApi(wrapped, { maxRetries: 2 }).getMetricList()).resolves.toEqual([]);
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+    expect(signTypedData).not.toHaveBeenCalled();
+  });
+
   it.each(['timeout', 'caller abort', 'connection reset'])(
     '%s remains a payment error with one signed payment, even with retries enabled',
     async (kind) => {

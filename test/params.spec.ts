@@ -8,7 +8,9 @@ import { API_KEY, DEFAULT_API_URL } from './constants.js';
 const PRICE = `${DEFAULT_API_URL}/v1/metrics/market/price_usd_close`;
 
 function okFetch(body: unknown = []) {
-  return vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(body) });
+  return vi
+    .fn()
+    .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify(body)) });
 }
 
 function neverFetch() {

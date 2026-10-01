@@ -13,6 +13,7 @@ import {
   GlassnodePaymentError,
 } from './errors.js';
 import { redactSecrets } from './redact.js';
+import { markUnpaidResponse } from './response-safety.js';
 
 /**
  * Minimal structural shape of the signer x402 needs: an EVM address and an EIP-712 typed-data
@@ -192,6 +193,7 @@ export async function createX402Fetch(options: X402FetchOptions): Promise<typeof
     if (paymentSent && !response.ok && response.status !== 402) {
       throw await toPaidHttpError(response, keys);
     }
+    if (!paymentSent) return markUnpaidResponse(response);
     return paymentSent && response.ok && response.body
       ? guardPaidBody(
           response,
