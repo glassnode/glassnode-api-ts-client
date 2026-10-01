@@ -19,6 +19,7 @@ import {
   GlassnodeValidationError,
 } from './errors.js';
 import { readErrorDetail } from './error-detail.js';
+import { isGlassnodeError, isUnpaidResponse } from './response-safety.js';
 import { redactApiKey, redactSecrets } from './redact.js';
 import {
   AssetMetadataResponse,
@@ -524,6 +525,7 @@ export class GlassnodeAPI {
   private retryDelay: number;
   private maxRetryDelay: number;
   private timeout?: number;
+  private x402: boolean;
 
   /**
    * Create a new Glassnode API client
@@ -546,6 +548,7 @@ export class GlassnodeAPI {
     this.logger = validatedConfig.logger;
     this.hooks = validatedConfig.hooks;
     this.fetchFn = validatedConfig.fetch ?? globalThis.fetch;
+    this.x402 = validatedConfig.x402;
     // The default depends on `x402`, so it is applied here rather than in the schema (which stays
     // a plain object schema): a retry through a caller-supplied payment fetch could pay twice.
     this.maxRetries =
@@ -647,7 +650,7 @@ export class GlassnodeAPI {
     try {
       return finish(await this.send(url, keyInHeader, options, trace));
     } catch (error) {
-      if (error instanceof GlassnodeError) {
+      if (isGlassnodeError(error)) {
         const status = errorStatus(error);
         const durationMs = trace.lastDurationMs;
         this.emit('onError', () => ({
@@ -720,7 +723,7 @@ export class GlassnodeAPI {
             ? combineSignals(signal, AbortSignal.timeout(timeout))
             : { signal: AbortSignal.timeout(timeout), dispose: () => {} };
       try {
-        // Transport step — the only part that is retried on failure.
+        // Transport to the headers; successful response-body transfers are checked below too.
         let response: Response;
         const sentAt = performance.now();
         try {
@@ -743,7 +746,7 @@ export class GlassnodeAPI {
           // Already classified by a library-aware fetch (e.g. a GlassnodePaymentError from
           // createX402Fetch, which also covers an abort after a payment was sent): surface it
           // unchanged and never retry it.
-          if (error instanceof GlassnodeError) throw error;
+          if (isGlassnodeError(error)) throw error;
           // Cancelled by the caller: never retried, whatever the fetch rejected with.
           if (signal?.aborted) throw aborted();
           // Network/transport failure (including a timeout abort) — retryable.
@@ -781,23 +784,64 @@ export class GlassnodeAPI {
             lastError = error;
             // Honour the server's Retry-After (e.g. on 429) for the next wait, if present.
             retryAfterMs = this.parseRetryAfter(response);
+            // A discarded streaming body still owns a connection. Do not wait to drain it.
+            try {
+              void response.body?.cancel().catch(() => {});
+            } catch {
+              // Cleanup must not replace the HTTP failure that caused the retry.
+            }
             continue;
           }
           // Surface the server's error body (e.g. "Resolution 1h is not allowed") in the message,
           // with the API key masked: a server or proxy may echo the request URL or the key.
           const detail = await readErrorDetail(response, [this.apiKey]);
+          if (signal?.aborted) throw aborted();
           throw detail ? new GlassnodeApiError(response.status, statusText, detail) : error;
         }
 
-        // Success. Parsing a 200 body is NOT a transient error, so it is thrown, never retried.
+        // Read bytes separately from parsing: polyfills can wrap invalid JSON in FetchError,
+        // so response.json() cannot reliably distinguish malformed JSON from failed transfers.
+        let readableBody = false;
+        let text: string;
         try {
-          return (await response.json()) as unknown;
+          readableBody = !!response.body && !response.bodyUsed && !response.body.locked;
+          text = await response.text();
         } catch (parseError) {
+          // A paid response stream classifies its own failures; never repeat its payment.
+          if (isGlassnodeError(parseError)) throw parseError;
           // Reading the body was cut off by the caller's abort: that is not a malformed body.
           if (signal?.aborted) throw aborted();
+          const failure = describeTransportFailure(parseError);
+          const bodyReadStarted = readableBody && response.bodyUsed;
+          const explicitAbort =
+            typeof parseError === 'object' &&
+            parseError !== null &&
+            ABORT_NAMES.has(String((parseError as { name?: unknown }).name));
+          if (failure && (bodyReadStarted || explicitAbort)) {
+            retryAfterMs = undefined;
+            lastError = new GlassnodeNetworkError(
+              `Glassnode API error: ${this.redact(failure.message)}`,
+              {
+                cause: parseError,
+                timedOut: failure.timedOut || (attemptSignal.signal?.aborted ?? false),
+              }
+            );
+            // A plain payment fetch may already have charged for this successful response.
+            // Only a response positively identified as unpaid is safe to repeat in x402 mode.
+            if (attempt < this.maxRetries && (!this.x402 || isUnpaidResponse(response))) continue;
+            throw lastError;
+          }
           throw new GlassnodeValidationError(
             'Glassnode API error: failed to parse response body as JSON',
             { cause: parseError, endpoint }
+          );
+        }
+        try {
+          return JSON.parse(text) as unknown;
+        } catch (cause) {
+          throw new GlassnodeValidationError(
+            'Glassnode API error: failed to parse response body as JSON',
+            { cause, endpoint }
           );
         }
       } finally {

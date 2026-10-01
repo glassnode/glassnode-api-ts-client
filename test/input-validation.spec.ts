@@ -117,7 +117,9 @@ describe('metric path validation', () => {
   });
 
   it('accepts dotted, hyphenated, digit and uppercase segments', async () => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify([])) });
     await client(fetchFn).callMetric('/supply/active_1d-1w.v2/Foo');
     expect(fetchFn).toHaveBeenCalledWith(
       `${DEFAULT_API_URL}/v1/metrics/supply/active_1d-1w.v2/Foo?f=json&api_key=${API_KEY}`
@@ -127,7 +129,10 @@ describe('metric path validation', () => {
 
 describe('callBulkMetric path suffix', () => {
   const okFetch = () =>
-    vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({ data: [] }) });
+    vi.fn().mockResolvedValue({
+      ok: true,
+      text: vi.fn().mockResolvedValue(JSON.stringify({ data: [] })),
+    });
 
   it.each(['/market/marketcap_usd/bulk', '/bulk'])(
     'rejects %j (ending in /bulk) without calling fetch',
@@ -171,7 +176,9 @@ describe('callBulkMetric path suffix', () => {
   });
 
   it('leaves callMetric with a /bulk path unaffected', async () => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify([])) });
     await client(fetchFn).callMetric('/market/marketcap_usd/bulk', { a: '*' });
     expect(fetchFn).toHaveBeenCalledWith(
       `${DEFAULT_API_URL}/v1/metrics/market/marketcap_usd/bulk?a=*&f=json&api_key=${API_KEY}`
@@ -193,7 +200,9 @@ describe('reserved query parameters', () => {
     });
 
     it.each(['json', 'JSON'])(`${method} does not reject an explicit f=%j`, async (f) => {
-      const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify([])) });
       // The canned `[]` body may fail response validation for some methods; only the input
       // check matters here: the request must be sent and must not be a GlassnodeInputError.
       const err = await invoke(client(fetchFn), method, '/market/price_usd_close', { f }).then(
@@ -206,7 +215,9 @@ describe('reserved query parameters', () => {
   }
 
   it.each(['json', 'JSON'])('callMetric still accepts an explicit f=%j', async (f) => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify([])) });
     await client(fetchFn).callMetric('/market/price_usd_close', { a: 'BTC', f });
     expect(fetchFn).toHaveBeenCalledWith(
       `${DEFAULT_API_URL}/v1/metrics/market/price_usd_close?a=BTC&f=json&api_key=${API_KEY}`
@@ -251,7 +262,9 @@ describe('reserved query parameters', () => {
   }
 
   it('callMetric still passes an unrelated "path" param through unchanged', async () => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify([])) });
     await client(fetchFn).callMetric('/market/price_usd_close', { path: 'x' });
     expect(fetchFn).toHaveBeenCalledWith(
       `${DEFAULT_API_URL}/v1/metrics/market/price_usd_close?path=x&f=json&api_key=${API_KEY}`
