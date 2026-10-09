@@ -1,0 +1,29 @@
+# Weekly updates for the npm dependencies (pnpm at the root, npm in examples/) and for GitHub
+# Actions. Security updates are separate and not delayed by the cooldown.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories: [/, /examples]
+    schedule:
+      interval: weekly
+    # Mirrors minimum-release-age in .npmrc: only versions published at least 7 days ago.
+    cooldown:
+      default-days: 7
+    groups:
+      # Minor and patch updates in one PR; each major update gets its own.
+      npm:
+        update-types: [minor, patch]
+    ignore:
+      # @types/node tracks the Node.js floor in engines, not the latest Node.js (CONTRIBUTING.md,
+      # "Toolchain pins"): it moves only when the floor is raised.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
