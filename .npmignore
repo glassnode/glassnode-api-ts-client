@@ -3,7 +3,7 @@
 .husky
 .gitignore
 .nvmrc
-CLAUDE.md
+AGENTS.md
 eslint.config.mjs
 prettier.config.mjs
 tsconfig.json
