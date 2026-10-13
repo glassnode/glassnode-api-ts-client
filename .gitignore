@@ -3,8 +3,13 @@ node_modules
 dist
 coverage
 
-# Environment variables
+# Local env and credentials
 .env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
 .claude
 
 # Examples use npm (package-lock.json is tracked); ignore a stray pnpm lockfile
