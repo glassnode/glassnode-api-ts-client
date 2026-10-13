@@ -194,7 +194,10 @@ export async function createX402Fetch(options: X402FetchOptions): Promise<typeof
       throw await toPaidHttpError(response, keys);
     }
     if (!paymentSent) return markUnpaidResponse(response);
-    return paymentSent && response.ok && response.body
+    // Only a WHATWG stream body can be wrapped. A Node-stream body (e.g. node-fetch v2) is returned
+    // as is: throwing here, after the payment was sent, would look like a retryable transport
+    // failure, and GlassnodeAPI never retries a paid x402 body failure anyway.
+    return response.ok && typeof response.body?.getReader === 'function'
       ? guardPaidBody(
           response,
           keys,

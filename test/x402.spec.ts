@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as vm from 'node:vm';
 import { x402Client, x402HTTPClient } from '@x402/fetch';
@@ -639,6 +640,52 @@ describe('createX402Fetch — an HTTP error after payment is never retried', () 
     expect(result).toEqual(['/market/price_usd_close']);
     expect(signTypedData).toHaveBeenCalledTimes(1);
     expect(baseFetch).toHaveBeenCalledTimes(2);
+  });
+
+  // node-fetch v2 and similar: a Response-like object whose body is a Node stream, not a WHATWG
+  // ReadableStream, so the paid body cannot be wrapped. It must not fail after the payment.
+  function nodeStreamResponse(text: () => Promise<string>): Response {
+    const body = Readable.from([]);
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      body,
+      bodyUsed: false,
+      text,
+    } as unknown as Response;
+  }
+
+  it('paid request -> 200 with a Node-stream body: success, one payment', async () => {
+    const baseFetch = scripted(() =>
+      nodeStreamResponse(async () => JSON.stringify(['/market/price_usd_close']))
+    );
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const paidFetch = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch as typeof fetch,
+    });
+    const result = await paidApi(paidFetch, { maxRetries: 2 }).getMetricList();
+    expect(result).toEqual(['/market/price_usd_close']);
+    expect(signTypedData).toHaveBeenCalledTimes(1);
+  });
+
+  it('paid request -> 200 with a Node-stream body that fails in transit: one payment, not retried', async () => {
+    const baseFetch = scripted(() =>
+      nodeStreamResponse(async () => {
+        throw new TypeError('terminated');
+      })
+    );
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const paidFetch = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch as typeof fetch,
+    });
+    const err = await caught(paidApi(paidFetch, { maxRetries: 2 }).getMetricList());
+    expect(err).toBeInstanceOf(GlassnodeError);
+    expect(signTypedData).toHaveBeenCalledTimes(1);
+    expect(baseFetch.mock.calls.filter(isPaidCall)).toHaveLength(1);
   });
 
   it('paid request -> 402 (payment refused) stays a GlassnodeApiError(402), one payment, not retried', async () => {

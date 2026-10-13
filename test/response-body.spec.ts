@@ -47,6 +47,32 @@ describe('response body transport and cancellation', () => {
     expect(onRetry).not.toHaveBeenCalled();
   });
 
+  it('accepts a minimal custom fetch response that exposes only json(), as 1.0.0 did', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ['/market/price_usd_close'],
+    });
+    const api = new GlassnodeAPI({ apiKey: 'unused', fetch: fetchFn });
+    await expect(api.getMetricList()).resolves.toEqual(['/market/price_usd_close']);
+  });
+
+  it('reports a failing json()-only response as a validation error, not retried', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token');
+      },
+    });
+    const onRetry = vi.fn();
+    const api = new GlassnodeAPI({ apiKey: 'unused', fetch: fetchFn, hooks: { onRetry } });
+    const error = await api.getMetricList().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GlassnodeValidationError);
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
   it.each(['timeout', 'reset'])(
     'does not repeat a plain payment fetch after a paid 200 body %s',
     async (kind) => {
@@ -117,7 +143,7 @@ describe('response body transport and cancellation', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['consumed', 'locked', 'missing text', 'custom text'])(
+  it.each(['consumed', 'locked', 'custom text'])(
     'does not retry a deterministic response failure: %s',
     async (kind) => {
       const response = new Response('[]');
@@ -125,7 +151,6 @@ describe('response body transport and cancellation', () => {
       const cause = new Error('custom parser failed');
       if (kind === 'consumed') await response.json();
       if (kind === 'locked') reader = response.body!.getReader();
-      if (kind === 'missing text') Object.defineProperty(response, 'text', { value: undefined });
       if (kind === 'custom text') {
         response.text = vi.fn().mockRejectedValue(cause);
       }

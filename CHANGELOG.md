@@ -17,6 +17,11 @@
   an explicit `maxRetries`, because the payment may already have settled. They raise
   `GlassnodeNetworkError`; only responses identified as unpaid by `createX402Fetch` can have
   their body transfer retried in x402 mode.
+- x402 with `createX402Fetch` over a base fetch whose body is a Node stream (e.g. node-fetch v2):
+  the paid response is returned as is instead of failing after the payment was sent, which a
+  retry would have paid for again.
+- A custom `fetch` returning a Response-like object with only `json()` keeps working as in 1.0.0;
+  its failures are non-retried `GlassnodeValidationError`s.
 
 ## 1.0.0
 

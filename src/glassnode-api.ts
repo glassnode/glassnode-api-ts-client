@@ -799,6 +799,20 @@ export class GlassnodeAPI {
           throw detail ? new GlassnodeApiError(response.status, statusText, detail) : error;
         }
 
+        // A minimal custom fetch may return a Response-like object with only json(), which 1.0.0
+        // accepted. Parse it there: its failures cannot be told apart, so none is retried.
+        if (typeof response.text !== 'function') {
+          try {
+            return (await response.json()) as unknown;
+          } catch (parseError) {
+            if (signal?.aborted) throw aborted();
+            throw new GlassnodeValidationError(
+              'Glassnode API error: failed to parse response body as JSON',
+              { cause: parseError, endpoint }
+            );
+          }
+        }
+
         // Read bytes separately from parsing: polyfills can wrap invalid JSON in FetchError,
         // so response.json() cannot reliably distinguish malformed JSON from failed transfers.
         let readableBody = false;
