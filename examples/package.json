@@ -5,7 +5,7 @@
   "dependencies": {
     "@x402/evm": "^2.28.0",
     "@x402/fetch": "^2.28.0",
-    "dotenv": "^16.6.1",
+    "dotenv": "^18.0.6",
     "viem": "^2.57.3"
   },
   "devDependencies": {
