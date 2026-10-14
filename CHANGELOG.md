@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.1
+
+- Fixed response-body transport failures (#59): timeouts and connection failures after successful
+  headers now raise `GlassnodeNetworkError` and follow the configured retry policy (subject to
+  the x402 payment safeguards below). Invalid JSON
+  and schema mismatches still raise non-retried `GlassnodeValidationError`.
+- Discarded `429`/`5xx` response bodies are cancelled before retrying, releasing their connection
+  resources. Cleanup failures or pending cancellation do not block retries (#61).
+- Caller cancellation while reading a terminal HTTP error body now raises `GlassnodeAbortError`
+  with the caller's reason, including whole-call deadlines (#60).
+- x402 with `createX402Fetch`: a successful paid response whose body fails in transit raises `GlassnodePaymentError`
+  (`paymentMayHaveSettled: true`), including timeouts and caller aborts. It is never retried, even
+  when retries are explicitly enabled. Invalid paid JSON remains a non-retried validation error.
+- x402 with a plain payment fetch: successful response-body failures are never retried, even with
+  an explicit `maxRetries`, because the payment may already have settled. They raise
+  `GlassnodeNetworkError`; only responses identified as unpaid by `createX402Fetch` can have
+  their body transfer retried in x402 mode.
+- x402 with `createX402Fetch` over a base fetch whose body is a Node stream (e.g. node-fetch v2):
+  the paid response is returned as is instead of failing after the payment was sent, which a
+  retry would have paid for again.
+- A custom `fetch` returning a Response-like object with only `json()` keeps working as in 1.0.0;
+  its failures are non-retried `GlassnodeValidationError`s.
+
 ## 1.0.0
 
 1.0.0 is the first stable release: from here on the public API follows semver, as the README's
