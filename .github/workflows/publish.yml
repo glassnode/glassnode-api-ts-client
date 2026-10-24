@@ -46,7 +46,7 @@ jobs:
       version: ${{ steps.state.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       # Fails the job (rather than publishing) if npm cannot be queried; only a 404 means
@@ -84,7 +84,7 @@ jobs:
           # scripts run for that bootstrap whatever npm config applies. It is scoped to this
           # step: the project installs below still honor the repo .npmrc.
           npm_config_ignore_scripts: 'false'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           # registry-url is required so npm knows the registry for the OIDC exchange. No cache
