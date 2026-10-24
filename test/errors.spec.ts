@@ -18,7 +18,9 @@ function api(fetchFn: ReturnType<typeof vi.fn>, extra: Record<string, unknown> =
 }
 
 function okJson(body: unknown) {
-  return vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(body) });
+  return vi
+    .fn()
+    .mockResolvedValue({ ok: true, text: vi.fn().mockResolvedValue(JSON.stringify(body)) });
 }
 
 async function caught(p: Promise<unknown>): Promise<unknown> {
@@ -149,7 +151,7 @@ describe('client failure paths', () => {
 
   it('unparseable 200 body -> GlassnodeValidationError (not retried)', async () => {
     const cause = new SyntaxError('Unexpected token < in JSON');
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockRejectedValue(cause) });
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, text: vi.fn().mockRejectedValue(cause) });
     const err = await caught(api(fetchFn, { maxRetries: 3, retryDelay: 1 }).getMetricList());
     expect(err).toBeInstanceOf(GlassnodeValidationError);
     expect(err).toBeInstanceOf(GlassnodeError);
@@ -163,7 +165,7 @@ describe('client failure paths', () => {
   it('never puts the API key in a validation error endpoint', async () => {
     const fetchFn = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockRejectedValue(new SyntaxError('bad')),
+      text: vi.fn().mockRejectedValue(new SyntaxError('bad')),
     });
     const err = (await caught(
       api(fetchFn).callMetric('/market/price_usd_close', { a: 'BTC' })
@@ -275,7 +277,10 @@ describe('transport rejection classification', () => {
     const fetchFn = vi
       .fn()
       .mockRejectedValueOnce({ name: 'TimeoutError', message: 'timed out' })
-      .mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue(mockMetricListResponse) });
+      .mockResolvedValueOnce({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
+      });
     const result = await api(fetchFn, { maxRetries: 1, retryDelay: 1 }).getMetricList();
     expect(result).toEqual(mockMetricListResponse);
     expect(fetchFn).toHaveBeenCalledTimes(2);

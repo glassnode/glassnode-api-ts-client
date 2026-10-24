@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as vm from 'node:vm';
 import { x402Client, x402HTTPClient } from '@x402/fetch';
@@ -641,6 +642,52 @@ describe('createX402Fetch — an HTTP error after payment is never retried', () 
     expect(baseFetch).toHaveBeenCalledTimes(2);
   });
 
+  // node-fetch v2 and similar: a Response-like object whose body is a Node stream, not a WHATWG
+  // ReadableStream, so the paid body cannot be wrapped. It must not fail after the payment.
+  function nodeStreamResponse(text: () => Promise<string>): Response {
+    const body = Readable.from([]);
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      body,
+      bodyUsed: false,
+      text,
+    } as unknown as Response;
+  }
+
+  it('paid request -> 200 with a Node-stream body: success, one payment', async () => {
+    const baseFetch = scripted(() =>
+      nodeStreamResponse(async () => JSON.stringify(['/market/price_usd_close']))
+    );
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const paidFetch = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch as typeof fetch,
+    });
+    const result = await paidApi(paidFetch, { maxRetries: 2 }).getMetricList();
+    expect(result).toEqual(['/market/price_usd_close']);
+    expect(signTypedData).toHaveBeenCalledTimes(1);
+  });
+
+  it('paid request -> 200 with a Node-stream body that fails in transit: one payment, not retried', async () => {
+    const baseFetch = scripted(() =>
+      nodeStreamResponse(async () => {
+        throw new TypeError('terminated');
+      })
+    );
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const paidFetch = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch as typeof fetch,
+    });
+    const err = await caught(paidApi(paidFetch, { maxRetries: 2 }).getMetricList());
+    expect(err).toBeInstanceOf(GlassnodeError);
+    expect(signTypedData).toHaveBeenCalledTimes(1);
+    expect(baseFetch.mock.calls.filter(isPaidCall)).toHaveLength(1);
+  });
+
   it('paid request -> 402 (payment refused) stays a GlassnodeApiError(402), one payment, not retried', async () => {
     const baseFetch = vi.fn(async () => response402());
     const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
@@ -1104,4 +1151,144 @@ describe('createX402Fetch — PAYMENT_HEADERS tracks @x402/core', () => {
       }
     }
   );
+});
+
+describe('paid successful response body failures', () => {
+  it('uses a Request input timeout reason when a paid body reports AbortError', async () => {
+    const reason = new DOMException('deadline', 'TimeoutError');
+    const cause = new DOMException('body aborted', 'AbortError');
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const baseFetch = vi.fn(async (input: RequestInfo | URL) =>
+      isPaidCall([input])
+        ? new Response(
+            new ReadableStream({
+              start(c) {
+                c.error(cause);
+              },
+            })
+          )
+        : response402()
+    );
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch,
+    });
+    const response = await wrapped(new Request(METRICS_URL, { signal: AbortSignal.abort(reason) }));
+    const error = await caught(response.text());
+    expect(error).toBeInstanceOf(GlassnodePaymentError);
+    expect(error).toMatchObject({ timedOut: true, paymentMayHaveSettled: true, cause });
+    expect(signTypedData).toHaveBeenCalledOnce();
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('still retries a failed successful unpaid body when retries are enabled', async () => {
+    const baseFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.error(new TypeError('terminated'));
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(new Response('[]'));
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch,
+    });
+    await expect(paidApi(wrapped, { maxRetries: 2 }).getMetricList()).resolves.toEqual([]);
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+    expect(signTypedData).not.toHaveBeenCalled();
+  });
+
+  it.each(['timeout', 'caller abort', 'connection reset'])(
+    '%s remains a payment error with one signed payment, even with retries enabled',
+    async (kind) => {
+      const controller = new AbortController();
+      const reason = new Error('caller cancelled');
+      const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+      const baseFetch = vi.fn(async (input: RequestInfo | URL) => {
+        if (!isPaidCall([input])) return response402();
+        const signal = (input as Request).signal;
+        return new Response(
+          new ReadableStream({
+            start(body) {
+              body.enqueue(new TextEncoder().encode('['));
+              signal.addEventListener('abort', () => body.error(signal.reason), { once: true });
+              if (kind === 'caller abort') setTimeout(() => controller.abort(reason), 10);
+              if (kind === 'connection reset')
+                setTimeout(() => body.error(new TypeError('terminated')), 10);
+            },
+          })
+        );
+      });
+      const wrapped = await createX402Fetch({
+        account: fakeAccount(signTypedData),
+        fetch: baseFetch,
+      });
+      const api = paidApi(wrapped, {
+        maxRetries: 2,
+        ...(kind === 'timeout' ? { timeout: 100 } : {}),
+      });
+      const error = await caught(api.getMetricList({ signal: controller.signal }));
+      expect(error).toBeInstanceOf(GlassnodePaymentError);
+      expect((error as GlassnodePaymentError).paymentMayHaveSettled).toBe(true);
+      expect((error as GlassnodePaymentError).timedOut).toBe(kind === 'timeout');
+      if (kind === 'caller abort') expect((error as Error).cause).toBe(reason);
+      expect(signTypedData).toHaveBeenCalledOnce();
+      expect(baseFetch).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('invalid paid JSON is still a non-retried validation failure', async () => {
+    const signTypedData = vi.fn(async (): Promise<`0x${string}`> => FAKE_SIGNATURE);
+    const baseFetch = vi.fn(async (input: RequestInfo | URL) =>
+      isPaidCall([input]) ? new Response('not JSON') : response402()
+    );
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(signTypedData),
+      fetch: baseFetch,
+    });
+    const error = await caught(paidApi(wrapped, { maxRetries: 2 }).getMetricList());
+    expect((error as Error).name).toBe('GlassnodeValidationError');
+    expect(signTypedData).toHaveBeenCalledOnce();
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('paid response stream compatibility', () => {
+  it('preserves status, headers, metadata and cloning', async () => {
+    const response = new Response('[]', { status: 201, headers: { 'X-Audit': 'ok' } });
+    Object.defineProperties(response, {
+      url: { value: 'https://x402.glassnode.com/v1/metadata/metrics' },
+      type: { value: 'basic' },
+    });
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(),
+      fetch: async (input) => (isPaidCall([input]) ? response : response402()),
+    });
+    const result = await wrapped('https://x402.glassnode.com/v1/metadata/metrics');
+    const clone = result.clone();
+    expect(result.status).toBe(201);
+    expect(result.headers.get('X-Audit')).toBe('ok');
+    expect(clone.url).toBe(response.url);
+    expect(clone.type).toBe('basic');
+    expect(clone.redirected).toBe(response.redirected);
+    await expect(Promise.all([result.json(), clone.json()])).resolves.toEqual([[], []]);
+  });
+
+  it('cancelling a paid response body cancels its original stream', async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }));
+    const wrapped = await createX402Fetch({
+      account: fakeAccount(),
+      fetch: async (input) => (isPaidCall([input]) ? response : response402()),
+    });
+    const result = await wrapped('https://x402.glassnode.com/v1/metadata/metrics');
+    await result.body!.cancel();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });
