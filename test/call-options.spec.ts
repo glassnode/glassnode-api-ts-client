@@ -150,7 +150,7 @@ describe('per-call options: signal', () => {
     const fetchFn = vi.fn(async () => {
       return {
         ok: true,
-        json: async () => {
+        text: async () => {
           controller.abort();
           throw new DOMException('This operation was aborted', 'AbortError');
         },

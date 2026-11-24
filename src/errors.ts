@@ -57,7 +57,7 @@ export class GlassnodeApiError extends GlassnodeError {
 }
 
 /**
- * The request never produced an HTTP response: DNS/connection failure, reset, or the per-request
+ * The request or response body failed in transit: DNS/connection failure, reset, or the per-request
  * `timeout` firing (also an abort that did not come from the caller's per-call `signal`). The
  * original error is on `.cause`. Retried when `maxRetries` > 0. A cancellation through the
  * per-call `signal` is a {@link GlassnodeAbortError} instead.

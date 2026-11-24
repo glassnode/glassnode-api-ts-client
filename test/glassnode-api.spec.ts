@@ -57,7 +57,7 @@ describe('GlassnodeAPI', () => {
       const logger = vi.fn();
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
       const api = new GlassnodeAPI({ apiKey: API_KEY, logger, fetch: fetchFn });
@@ -70,7 +70,7 @@ describe('GlassnodeAPI', () => {
       const logger = vi.fn();
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
       const api = new GlassnodeAPI({ apiKey: API_KEY, logger, fetch: fetchFn });
@@ -84,7 +84,7 @@ describe('GlassnodeAPI', () => {
     it('should use custom fetch when provided', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -100,7 +100,7 @@ describe('GlassnodeAPI', () => {
     it('does not pass a second fetch argument when no timeout is set', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -114,7 +114,7 @@ describe('GlassnodeAPI', () => {
     it('passes an AbortSignal to fetch when timeout is set', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
       const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, timeout: 5000 });
@@ -148,7 +148,10 @@ describe('GlassnodeAPI', () => {
 
   describe('apiKeyLocation', () => {
     const okFetch = () =>
-      createMockFetch({ ok: true, json: vi.fn().mockResolvedValue(mockMetricListResponse) });
+      createMockFetch({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
+      });
 
     it('defaults to the api_key query parameter, with no fetch init (unchanged)', async () => {
       const fetchFn = okFetch();
@@ -183,7 +186,10 @@ describe('GlassnodeAPI', () => {
     });
 
     it("'header' keeps other query params in the URL", async () => {
-      const fetchFn = createMockFetch({ ok: true, json: vi.fn().mockResolvedValue([]) });
+      const fetchFn = createMockFetch({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify([])),
+      });
       const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, apiKeyLocation: 'header' });
       await api.callMetric('/market/price_usd_close', { a: 'BTC' });
 
@@ -211,7 +217,10 @@ describe('GlassnodeAPI', () => {
       const fetchFn = vi
         .fn()
         .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Service Unavailable' })
-        .mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(mockMetricListResponse) });
+        .mockResolvedValue({
+          ok: true,
+          text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
+        });
       const api = new GlassnodeAPI({
         apiKey: API_KEY,
         fetch: fetchFn,
@@ -304,7 +313,7 @@ describe('GlassnodeAPI', () => {
     it('should fetch asset metadata', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({ data: mockAssetMetadataResponse }),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ data: mockAssetMetadataResponse })),
       });
 
       const api = createApi(fetchFn);
@@ -329,7 +338,7 @@ describe('GlassnodeAPI', () => {
       };
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(response),
+        text: vi.fn().mockResolvedValue(JSON.stringify(response)),
       });
 
       const api = createApi(fetchFn);
@@ -343,7 +352,7 @@ describe('GlassnodeAPI', () => {
     it('leaves the optional descriptive fields undefined when the API omits them', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({ data: mockAssetMetadataResponse }),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ data: mockAssetMetadataResponse })),
       });
 
       const [asset] = await createApi(fetchFn).getAssetMetadata();
@@ -367,7 +376,10 @@ describe('GlassnodeAPI', () => {
           },
         ],
       };
-      const fetchFn = createMockFetch({ ok: true, json: vi.fn().mockResolvedValue(response) });
+      const fetchFn = createMockFetch({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify(response)),
+      });
 
       const [asset] = await createApi(fetchFn).getAssetMetadata();
 
@@ -379,7 +391,10 @@ describe('GlassnodeAPI', () => {
 
     it('rejects a descriptive field of the wrong type', async () => {
       const response = { data: [{ ...mockAssetMetadataResponse[0], categories: 'spot' }] };
-      const fetchFn = createMockFetch({ ok: true, json: vi.fn().mockResolvedValue(response) });
+      const fetchFn = createMockFetch({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify(response)),
+      });
 
       await expect(createApi(fetchFn).getAssetMetadata()).rejects.toThrow();
     });
@@ -395,7 +410,7 @@ describe('GlassnodeAPI', () => {
       };
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(response),
+        text: vi.fn().mockResolvedValue(JSON.stringify(response)),
       });
 
       const api = createApi(fetchFn);
@@ -420,7 +435,7 @@ describe('GlassnodeAPI', () => {
     it('should fetch metric metadata', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockRawMetricMetadataResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockRawMetricMetadataResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -438,7 +453,7 @@ describe('GlassnodeAPI', () => {
     it('leaves parameters_defaults undefined when the API omits it', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockRawMetricMetadataResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockRawMetricMetadataResponse)),
       });
 
       const result = await createApi(fetchFn).getMetricMetadata('/distribution/balance_exchanges');
@@ -451,10 +466,12 @@ describe('GlassnodeAPI', () => {
       for (const parametersDefaults of [{ e: ['aggregated'] }, {}]) {
         const fetchFn = createMockFetch({
           ok: true,
-          json: vi.fn().mockResolvedValue({
-            ...mockRawMetricMetadataResponse,
-            parameters_defaults: parametersDefaults,
-          }),
+          text: vi.fn().mockResolvedValue(
+            JSON.stringify({
+              ...mockRawMetricMetadataResponse,
+              parameters_defaults: parametersDefaults,
+            })
+          ),
         });
 
         const result = await createApi(fetchFn).getMetricMetadata(
@@ -487,7 +504,10 @@ describe('GlassnodeAPI', () => {
       delete raw.refs;
       delete raw.queried;
       delete raw.parameters;
-      const fetchFn = createMockFetch({ ok: true, json: vi.fn().mockResolvedValue(raw) });
+      const fetchFn = createMockFetch({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify(raw)),
+      });
 
       const result = await createApi(fetchFn).getMetricMetadata('/distribution/balance_exchanges');
 
@@ -500,10 +520,12 @@ describe('GlassnodeAPI', () => {
     it('rejects parameters_defaults whose values are not string arrays', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          ...mockRawMetricMetadataResponse,
-          parameters_defaults: { e: 'aggregated' },
-        }),
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            ...mockRawMetricMetadataResponse,
+            parameters_defaults: { e: 'aggregated' },
+          })
+        ),
       });
 
       await expect(
@@ -514,7 +536,7 @@ describe('GlassnodeAPI', () => {
     it('should handle optional params', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockRawMetricMetadataResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockRawMetricMetadataResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -545,7 +567,7 @@ describe('GlassnodeAPI', () => {
     it('should fetch metric stats', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricStatsResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricStatsResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -561,7 +583,7 @@ describe('GlassnodeAPI', () => {
     it('should handle optional params', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricStatsResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricStatsResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -587,7 +609,7 @@ describe('GlassnodeAPI', () => {
       };
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(response),
+        text: vi.fn().mockResolvedValue(JSON.stringify(response)),
       });
 
       const api = createApi(fetchFn);
@@ -600,7 +622,9 @@ describe('GlassnodeAPI', () => {
     it('should reject a malformed response', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({ lag: [{ unit: 'seconds', window: '30d' }] }),
+        text: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ lag: [{ unit: 'seconds', window: '30d' }] })),
       });
 
       const api = createApi(fetchFn);
@@ -627,7 +651,7 @@ describe('GlassnodeAPI', () => {
     it('should fetch metric list', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
       const api = createApi(fetchFn);
@@ -659,7 +683,7 @@ describe('GlassnodeAPI', () => {
       const mockData = [{ t: 1609459200, v: 29000 }];
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockData),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockData)),
       });
 
       const api = createApi(fetchFn);
@@ -702,7 +726,7 @@ describe('GlassnodeAPI', () => {
       ];
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({ data: mockData }),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ data: mockData })),
       });
 
       const api = createApi(fetchFn);
@@ -730,7 +754,7 @@ describe('GlassnodeAPI', () => {
       ];
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({ data: mockData }),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ data: mockData })),
       });
 
       const api = createApi(fetchFn);
@@ -743,7 +767,9 @@ describe('GlassnodeAPI', () => {
     it('still rejects a non-numeric, non-null value', async () => {
       const fetchFn = createMockFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue({ data: [{ t: 1, bulk: [{ a: 'BTC', v: '1' }] }] }),
+        text: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ data: [{ t: 1, bulk: [{ a: 'BTC', v: '1' }] }] })),
       });
 
       const api = createApi(fetchFn);
@@ -916,7 +942,7 @@ describe('GlassnodeAPI', () => {
         .mockResolvedValueOnce({ ok: false, status: 429, statusText: 'Too Many Requests' })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue(mockMetricListResponse),
+          text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
         });
 
       const api = new GlassnodeAPI({
@@ -937,7 +963,7 @@ describe('GlassnodeAPI', () => {
         .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Internal Server Error' })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue(mockMetricListResponse),
+          text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
         });
 
       const api = new GlassnodeAPI({
@@ -994,7 +1020,7 @@ describe('GlassnodeAPI', () => {
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue(mockMetricListResponse),
+          text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
         });
 
       const api = new GlassnodeAPI({
@@ -1012,7 +1038,7 @@ describe('GlassnodeAPI', () => {
     it('does not retry a 200 response with an unparseable body', async () => {
       const fetchFn = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token < in JSON')),
+        text: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token < in JSON')),
       });
 
       const api = new GlassnodeAPI({
@@ -1038,7 +1064,7 @@ describe('GlassnodeAPI', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue(mockMetricListResponse),
+          text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
         });
 
       const api = new GlassnodeAPI({
@@ -1082,7 +1108,7 @@ describe('GlassnodeAPI', () => {
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue(mockMetricListResponse),
+          text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
         });
       const api = new GlassnodeAPI({ apiKey: API_KEY, fetch: fetchFn, retryDelay: 1 });
 
@@ -1119,7 +1145,7 @@ describe('GlassnodeAPI', () => {
     const okFetch = () =>
       vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockMetricListResponse),
+        text: vi.fn().mockResolvedValue(JSON.stringify(mockMetricListResponse)),
       });
 
     it('routes to the x402 host when x402 is true', async () => {
